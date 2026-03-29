@@ -1,0 +1,7 @@
+# Python cache folders
+__pycache__/
+
+# Python compiled files
+*.pyc
+*.pyo
+*.pyd
