@@ -5,11 +5,67 @@ import subprocess
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 from caption_app.db import BibleRepository, DB_PATH
 from caption_app.models import CaptionEntry, VerseBundle
 from caption_app.srt import format_srt
+
+FONT_CHOICES = sorted(
+    [
+        "Arial",
+        "Helvetica",
+        "Times New Roman",
+        "Georgia",
+        "Verdana",
+        "Tahoma",
+        "Trebuchet MS",
+        "Garamond",
+        "Palatino Linotype",
+        "Book Antiqua",
+        "Baskerville",
+        "Cambria",
+        "Calibri",
+        "Candara",
+        "Segoe UI",
+        "Franklin Gothic Medium",
+        "Gill Sans",
+        "Futura",
+        "Avenir Next",
+        "Avenir",
+        "Optima",
+        "Didot",
+        "Bodoni 72",
+        "Rockwell",
+        "Courier New",
+        "Consolas",
+        "Lucida Sans Unicode",
+        "Century Gothic",
+        "Corbel",
+        "Constantia",
+        "Monaco",
+        "Menlo",
+        "SF Pro Display",
+        "SF Pro Text",
+        "Roboto",
+        "Open Sans",
+        "Lato",
+        "Montserrat",
+        "Poppins",
+        "Nunito",
+        "Source Sans Pro",
+        "Noto Sans",
+        "Noto Serif",
+        "PT Sans",
+        "Ubuntu",
+        "Malgun Gothic",
+        "Apple SD Gothic Neo",
+        "NanumGothic",
+        "Noto Sans CJK KR",
+        "Pretendard",
+    ],
+    key=str.casefold,
+)
 
 
 class CaptionStudioApp:
@@ -17,6 +73,7 @@ class CaptionStudioApp:
         self.repository = BibleRepository()
         self.books = self.repository.list_books()
         self.current_bundle: VerseBundle | None = None
+        self.panel_visible = True
 
         self.root = tk.Tk()
         self.root.title("Bible DSK")
@@ -28,12 +85,17 @@ class CaptionStudioApp:
         self.chapter_var = tk.StringVar()
         self.verse_var = tk.StringVar()
         self.duration_var = tk.StringVar(value="6.0")
+        self.text_font_var = tk.StringVar(value=self._default_preview_font())
         self.video_path_var = tk.StringVar()
         self.status_var = tk.StringVar(value=f"Connected to {DB_PATH.name}")
 
         self.book_picker: tk.OptionMenu
         self.chapter_picker: tk.OptionMenu
         self.verse_picker: tk.OptionMenu
+        self.font_combo: ttk.Combobox
+        self.root_frame: tk.Frame
+        self.stage_frame: tk.Frame
+        self.control_frame: tk.Frame
         self.preview_canvas: tk.Canvas
         self.reference_tag_id: int
         self.korean_text_id: int
@@ -44,6 +106,8 @@ class CaptionStudioApp:
         self._build_menu()
         self._build_layout()
         self._load_initial_state()
+        self.root.bind_all("<Control-i>", self._toggle_panel_event)
+        self.root.bind_all("<Control-I>", self._toggle_panel_event)
 
     def run(self) -> None:
         self.root.mainloop()
@@ -64,19 +128,19 @@ class CaptionStudioApp:
         self.root.config(menu=menu)
 
     def _build_layout(self) -> None:
-        root = tk.Frame(self.root, bg="#111111")
-        root.pack(fill="both", expand=True)
-        root.grid_columnconfigure(0, weight=4)
-        root.grid_columnconfigure(1, weight=1)
-        root.grid_rowconfigure(0, weight=1)
+        self.root_frame = tk.Frame(self.root, bg="#111111")
+        self.root_frame.pack(fill="both", expand=True)
+        self.root_frame.grid_columnconfigure(0, weight=4)
+        self.root_frame.grid_columnconfigure(1, weight=1)
+        self.root_frame.grid_rowconfigure(0, weight=1)
 
-        stage_frame = tk.Frame(root, bg="#111111", padx=18, pady=18)
-        stage_frame.grid(row=0, column=0, sticky="nsew")
-        stage_frame.grid_rowconfigure(0, weight=1)
-        stage_frame.grid_columnconfigure(0, weight=1)
+        self.stage_frame = tk.Frame(self.root_frame, bg="#111111", padx=18, pady=18)
+        self.stage_frame.grid(row=0, column=0, sticky="nsew")
+        self.stage_frame.grid_rowconfigure(0, weight=1)
+        self.stage_frame.grid_columnconfigure(0, weight=1)
 
         self.preview_canvas = tk.Canvas(
-            stage_frame,
+            self.stage_frame,
             bg="#050505",
             highlightthickness=0,
             bd=0,
@@ -84,15 +148,31 @@ class CaptionStudioApp:
         self.preview_canvas.grid(row=0, column=0, sticky="nsew")
         self.preview_canvas.bind("<Configure>", self._redraw_preview)
 
-        control_frame = tk.Frame(root, bg="#181818", padx=20, pady=20)
-        control_frame.grid(row=0, column=1, sticky="nsew")
-        control_frame.grid_columnconfigure(0, weight=1)
+        self.control_frame = tk.Frame(self.root_frame, bg="#181818", padx=20, pady=20)
+        self.control_frame.grid(row=0, column=1, sticky="nsew")
+        self.control_frame.grid_columnconfigure(0, weight=1)
+        self._configure_ttk_styles()
 
-        self._make_title(control_frame, "Bible Caption Studio", 0)
-        self._make_subtitle(control_frame, "Select a verse from SQLite and render it as a subtitle overlay.", 1)
+        header_frame = tk.Frame(self.control_frame, bg="#181818")
+        header_frame.grid(row=0, column=0, sticky="ew")
+        header_frame.grid_columnconfigure(0, weight=1)
 
-        self._make_section_label(control_frame, "Video", 2)
-        video_row = tk.Frame(control_frame, bg="#181818")
+        self._make_title(header_frame, "Bible Caption Studio", 0)
+        self._make_action_button(
+            header_frame,
+            text="x",
+            command=self._hide_panel,
+            bg="#2A2A2A",
+            fg="#E6E6E6",
+            hover_bg="#3A3A3A",
+            font=("Helvetica", 13, "bold"),
+            padx=12,
+            pady=8,
+        ).grid(row=0, column=1, sticky="ne")
+        self._make_subtitle(self.control_frame, "Select a verse from SQLite and render it as a subtitle overlay.", 1)
+
+        self._make_section_label(self.control_frame, "Video", 2)
+        video_row = tk.Frame(self.control_frame, bg="#181818")
         video_row.grid(row=3, column=0, sticky="ew", pady=(8, 18))
         video_row.grid_columnconfigure(0, weight=1)
 
@@ -107,27 +187,36 @@ class CaptionStudioApp:
             highlightbackground="#343434",
             highlightcolor="#4E59FF",
         ).grid(row=0, column=0, sticky="ew", padx=(0, 8), ipady=8)
-        tk.Button(
+        self._make_action_button(
             video_row,
             text="Browse",
             command=self._choose_video,
             bg="#F3F3F3",
             fg="#111111",
-            relief="flat",
-            activebackground="#FFFFFF",
-            activeforeground="#111111",
-            padx=14,
-            pady=8,
+            hover_bg="#FFFFFF",
+            padx=18,
+            pady=10,
         ).grid(row=0, column=1)
 
-        self._make_section_label(control_frame, "Reference", 4)
-        self.book_picker = self._make_option_menu(control_frame, 5, self.book_var, self._on_book_change)
-        self.chapter_picker = self._make_option_menu(control_frame, 6, self.chapter_var, self._on_chapter_change)
-        self.verse_picker = self._make_option_menu(control_frame, 7, self.verse_var, self._on_verse_change)
+        self._make_section_label(self.control_frame, "Reference", 4)
+        self.book_picker = self._make_option_menu(self.control_frame, 5, self.book_var, self._on_book_change)
+        self.chapter_picker = self._make_option_menu(self.control_frame, 6, self.chapter_var, self._on_chapter_change)
+        self.verse_picker = self._make_option_menu(self.control_frame, 7, self.verse_var, self._on_verse_change)
 
-        self._make_section_label(control_frame, "Subtitle Duration (seconds)", 8)
+        self._make_section_label(self.control_frame, "Text Font", 8)
+        self.font_combo = ttk.Combobox(
+            self.control_frame,
+            textvariable=self.text_font_var,
+            values=FONT_CHOICES,
+            state="readonly",
+            style="BibleDisk.TCombobox",
+        )
+        self.font_combo.grid(row=9, column=0, sticky="ew", pady=(8, 18), ipady=6)
+        self.font_combo.bind("<<ComboboxSelected>>", self._on_font_change)
+
+        self._make_section_label(self.control_frame, "Subtitle Duration (seconds)", 10)
         tk.Entry(
-            control_frame,
+            self.control_frame,
             textvariable=self.duration_var,
             bg="#242424",
             fg="#F3F3F3",
@@ -136,66 +225,58 @@ class CaptionStudioApp:
             highlightthickness=1,
             highlightbackground="#343434",
             highlightcolor="#4E59FF",
-        ).grid(row=9, column=0, sticky="ew", ipady=8, pady=(8, 18))
+        ).grid(row=11, column=0, sticky="ew", ipady=8, pady=(8, 18))
 
-        action_frame = tk.Frame(control_frame, bg="#181818")
-        action_frame.grid(row=10, column=0, sticky="ew")
+        action_frame = tk.Frame(self.control_frame, bg="#181818")
+        action_frame.grid(row=12, column=0, sticky="ew")
         action_frame.grid_columnconfigure(0, weight=1)
         action_frame.grid_columnconfigure(1, weight=1)
 
-        tk.Button(
+        self._make_action_button(
             action_frame,
             text="Preview Verse",
             command=self._refresh_selected_verse,
             bg="#364BFF",
             fg="#F8F8F8",
-            relief="flat",
-            activebackground="#4358FF",
-            activeforeground="#F8F8F8",
+            hover_bg="#4358FF",
             padx=14,
             pady=12,
         ).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        tk.Button(
+        self._make_action_button(
             action_frame,
             text="Export SRT",
             command=self._export_current_verse_srt,
             bg="#252525",
             fg="#F8F8F8",
-            relief="flat",
-            activebackground="#313131",
-            activeforeground="#F8F8F8",
+            hover_bg="#313131",
             padx=14,
             pady=12,
         ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
-        tk.Button(
-            control_frame,
+        self._make_action_button(
+            self.control_frame,
             text="Copy Verse Text",
             command=self._copy_current_verse,
             bg="#252525",
             fg="#F8F8F8",
-            relief="flat",
-            activebackground="#313131",
-            activeforeground="#F8F8F8",
+            hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=11, column=0, sticky="ew", pady=(12, 8))
+        ).grid(row=13, column=0, sticky="ew", pady=(12, 8))
 
-        tk.Button(
-            control_frame,
+        self._make_action_button(
+            self.control_frame,
             text="Open Video Player",
             command=self._open_in_player,
             bg="#252525",
             fg="#F8F8F8",
-            relief="flat",
-            activebackground="#313131",
-            activeforeground="#F8F8F8",
+            hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=12, column=0, sticky="ew")
+        ).grid(row=14, column=0, sticky="ew")
 
         status = tk.Label(
-            control_frame,
+            self.control_frame,
             textvariable=self.status_var,
             anchor="w",
             justify="left",
@@ -204,7 +285,7 @@ class CaptionStudioApp:
             fg="#B8B8B8",
             font=("Helvetica", 11),
         )
-        status.grid(row=13, column=0, sticky="ew", pady=(22, 0))
+        status.grid(row=15, column=0, sticky="ew", pady=(22, 0))
 
     def _make_title(self, parent: tk.Widget, text: str, row: int) -> None:
         tk.Label(
@@ -238,6 +319,62 @@ class CaptionStudioApp:
             font=("Helvetica", 10, "bold"),
         ).grid(row=row, column=0, sticky="ew")
 
+    def _make_action_button(
+        self,
+        parent: tk.Widget,
+        text: str,
+        command,
+        bg: str,
+        fg: str,
+        hover_bg: str,
+        padx: int = 14,
+        pady: int = 12,
+        font: tuple[str, int] | tuple[str, int, str] = ("Helvetica", 11, "bold"),
+    ) -> tk.Label:
+        button = tk.Label(
+            parent,
+            text=text,
+            bg=bg,
+            fg=fg,
+            font=font,
+            padx=padx,
+            pady=pady,
+            cursor="hand2",
+            relief="flat",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground="#343434",
+            highlightcolor="#4E59FF",
+        )
+        button.bind("<Button-1>", lambda _: command())
+        button.bind("<Enter>", lambda _: button.configure(bg=hover_bg))
+        button.bind("<Leave>", lambda _: button.configure(bg=bg))
+        return button
+
+    def _configure_ttk_styles(self) -> None:
+        style = ttk.Style(self.root)
+        style.theme_use("clam")
+        style.configure(
+            "BibleDisk.TCombobox",
+            fieldbackground="#242424",
+            background="#242424",
+            foreground="#F3F3F3",
+            arrowcolor="#F3F3F3",
+            bordercolor="#343434",
+            lightcolor="#343434",
+            darkcolor="#343434",
+        )
+        style.map(
+            "BibleDisk.TCombobox",
+            fieldbackground=[("readonly", "#242424")],
+            background=[("readonly", "#242424")],
+            foreground=[("readonly", "#F3F3F3")],
+        )
+        self.root.option_add("*TCombobox*Listbox.background", "#242424")
+        self.root.option_add("*TCombobox*Listbox.foreground", "#F3F3F3")
+        self.root.option_add("*TCombobox*Listbox.selectBackground", "#4E59FF")
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#F3F3F3")
+
     def _make_option_menu(
         self,
         parent: tk.Widget,
@@ -269,6 +406,7 @@ class CaptionStudioApp:
     def _load_initial_state(self) -> None:
         if not self.books:
             raise RuntimeError("The SQLite database does not contain any Bible books.")
+        self.font_combo.set(self.text_font_var.get())
         self._set_menu_values(self.book_picker, self.book_var, [self._book_label(book) for book in self.books])
 
     def _on_book_change(self) -> None:
@@ -319,6 +457,39 @@ class CaptionStudioApp:
     def _book_label(self, book) -> str:
         return f"{book.book_id:02}  {book.korean_name} | {book.english_name}"
 
+    def _default_preview_font(self) -> str:
+        if sys.platform == "darwin":
+            return "Apple SD Gothic Neo"
+        if sys.platform.startswith("win"):
+            return "Malgun Gothic"
+        return "Helvetica"
+
+    def _preview_font_family(self) -> str:
+        selected_font = self.text_font_var.get().strip()
+        return selected_font or self._default_preview_font()
+
+    def _on_font_change(self, _: object | None = None) -> None:
+        self._redraw_preview()
+
+    def _toggle_panel_event(self, _: object | None = None) -> None:
+        self._set_panel_visible(not self.panel_visible)
+
+    def _hide_panel(self) -> None:
+        self._set_panel_visible(False)
+
+    def _set_panel_visible(self, visible: bool) -> None:
+        self.panel_visible = visible
+        if visible:
+            self.control_frame.grid()
+            self.root_frame.grid_columnconfigure(1, weight=1)
+            self.stage_frame.grid_configure(columnspan=1)
+            self._set_status("Right panel shown. Press Ctrl+I to hide it.")
+        else:
+            self.control_frame.grid_remove()
+            self.root_frame.grid_columnconfigure(1, weight=0)
+            self.stage_frame.grid_configure(columnspan=2)
+            self._set_status("Right panel hidden. Press Ctrl+I to show it again.")
+
     def _set_menu_values(self, menu_widget: tk.OptionMenu, variable: tk.StringVar, values: list[str]) -> None:
         menu = menu_widget["menu"]
         menu.delete(0, "end")
@@ -337,6 +508,7 @@ class CaptionStudioApp:
 
         width = max(canvas.winfo_width(), 900)
         height = max(canvas.winfo_height(), 600)
+        font_family = self._preview_font_family()
 
         canvas.create_rectangle(0, 0, width, height, fill="#030303", outline="")
         canvas.create_text(
@@ -358,7 +530,7 @@ class CaptionStudioApp:
                 font=("Helvetica", 11),
             )
 
-        overlay_height = min(220, int(height * 0.29))
+        overlay_height = min(280, int(height * 0.34))
         overlay_top = height - overlay_height
         self._draw_gradient(canvas, width, overlay_top, height)
 
@@ -373,52 +545,55 @@ class CaptionStudioApp:
             english = self.current_bundle.english_text
             spanish = self.current_bundle.spanish_text
 
-        tag_width = min(max(280, len(tag_text) * 9), width - 80)
+        tag_width = min(max(360, len(tag_text) * 12), width - 80)
         canvas.create_rectangle(
             24,
-            overlay_top - 38,
+            overlay_top - 58,
             24 + tag_width,
-            overlay_top + 18,
+            overlay_top + 22,
             fill="#F4F4F1",
             outline="",
         )
         canvas.create_text(
             40,
-            overlay_top - 10,
+            overlay_top - 18,
             anchor="w",
             text=tag_text,
             fill="#2F3FAD",
-            font=("Helvetica", 15, "bold"),
+            font=(font_family, 23, "bold"),
         )
 
-        text_left = 34
-        text_width = width - 68
+        text_left = 40
+        text_width = width - 80
+        korean_font_size = max(26, min(35, int(width * 0.028)))
+        english_font_size = max(25, min(33, int(width * 0.027)))
+        spanish_font_size = max(24, min(31, int(width * 0.026)))
         canvas.create_text(
             text_left,
-            overlay_top + 42,
+            overlay_top + 36,
             anchor="nw",
             width=text_width,
             text=korean,
             fill="#F3F3F3",
-            font=("Helvetica", 18),
+            font=(font_family, korean_font_size),
         )
         canvas.create_text(
             text_left,
-            overlay_top + 92,
+            overlay_top + 102,
             anchor="nw",
             width=text_width,
             text=english,
             fill="#FFF36E",
-            font=("Helvetica", 18),
+            font=(font_family, english_font_size),
         )
         canvas.create_text(
             text_left,
-            overlay_top + 142,
+            overlay_top + 164,
             anchor="nw",
             width=text_width,
             text=spanish,
             fill="#FFC6A4",
-            font=("Helvetica", 18),
+            font=(font_family, spanish_font_size),
         )
 
     def _draw_gradient(self, canvas: tk.Canvas, width: int, top: int, bottom: int) -> None:
