@@ -86,7 +86,7 @@ class CaptionStudioApp:
         self.countdown_end_time: float | None = None
 
         self.root = tk.Tk()
-        self.root.title("Bible DSK")
+        self.root.title("Bible Caption Studio")
         self.root.geometry("1280x900")
         self.root.minsize(1080, 760)
         self.root.configure(bg="#111111")
