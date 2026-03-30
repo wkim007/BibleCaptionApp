@@ -6,6 +6,7 @@ import sys
 import tkinter as tk
 import tkinter.colorchooser as colorchooser
 import tkinter.font as tkfont
+import tkinter.simpledialog as simpledialog
 import time
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -136,6 +137,8 @@ class CaptionStudioApp:
         self._load_initial_state()
         self.root.bind_all("<Control-i>", self._toggle_panel_event)
         self.root.bind_all("<Control-I>", self._toggle_panel_event)
+        self.root.bind_all("<Control-f>", self._open_search_dialog)
+        self.root.bind_all("<Control-F>", self._open_search_dialog)
         self.root.bind_all("<Left>", self._show_previous_verse)
         self.root.bind_all("<Right>", self._show_next_verse)
         self.root.bind_all("<Up>", self._show_next_book)
@@ -622,6 +625,23 @@ class CaptionStudioApp:
         value = self.book_var.get().strip()
         return next((book for book in self.books if self._book_label(book) == value), None)
 
+    def _find_book_by_name(self, raw_name: str):
+        normalized = " ".join(raw_name.strip().split()).casefold()
+        if not normalized:
+            return None
+
+        for book in self.books:
+            candidates = {
+                book.korean_name.casefold(),
+                book.english_name.casefold(),
+            }
+            short_english = getattr(book, "english_name", "")
+            if short_english:
+                candidates.add(short_english.casefold())
+            if normalized in candidates:
+                return book
+        return None
+
     def _selected_int(self, variable: tk.StringVar) -> int | None:
         value = variable.get().strip()
         if not value:
@@ -704,6 +724,54 @@ class CaptionStudioApp:
 
     def _show_previous_book(self, event: object | None = None) -> None:
         self._navigate_book(-1)
+
+    def _open_search_dialog(self, event: object | None = None) -> str | None:
+        query = simpledialog.askstring(
+            "Find Verse",
+            "Enter a verse reference like 'John 1:1' or '요한복음 1:1'",
+            parent=self.root,
+        )
+        if query is None:
+            return "break"
+        self._search_and_navigate(query)
+        return "break"
+
+    def _search_and_navigate(self, query: str) -> None:
+        raw = " ".join(query.strip().split())
+        if not raw:
+            messagebox.showerror("Search", "not found or invalid input")
+            return
+
+        try:
+            book_name, reference = raw.rsplit(" ", 1)
+            chapter_text, verse_text = reference.split(":", 1)
+            chapter_num = int(chapter_text)
+            verse_num = int(verse_text)
+        except ValueError:
+            messagebox.showerror("Search", "not found or invalid input")
+            return
+
+        if chapter_num <= 0 or verse_num <= 0:
+            messagebox.showerror("Search", "not found or invalid input")
+            return
+
+        book = self._find_book_by_name(book_name)
+        if book is None:
+            messagebox.showerror("Search", "not found or invalid input")
+            return
+
+        if chapter_num > book.chapter_count:
+            messagebox.showerror("Search", "not found or invalid input")
+            return
+
+        verses = self.repository.list_verses(book.book_id, chapter_num)
+        if verse_num not in verses:
+            messagebox.showerror("Search", "not found or invalid input")
+            return
+
+        self.book_var.set(self._book_label(book))
+        self.chapter_var.set(str(chapter_num))
+        self.verse_var.set(str(verse_num))
 
     def _book_label(self, book) -> str:
         return f"{book.book_id:02}  {book.korean_name} | {book.english_name}"
