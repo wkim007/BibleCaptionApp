@@ -594,7 +594,6 @@ class CaptionStudioApp:
         command: callable,
     ) -> tk.OptionMenu:
         option = tk.OptionMenu(parent, variable, "")
-        option_font = (self._reference_font_family(), 11)
         option.configure(
             bg="#242424",
             fg="#F3F3F3",
@@ -604,14 +603,12 @@ class CaptionStudioApp:
             highlightthickness=0,
             direction="below",
             anchor="w",
-            font=option_font,
         )
         option["menu"].configure(
             bg="#242424",
             fg="#F3F3F3",
             activebackground="#4E59FF",
             activeforeground="#F3F3F3",
-            font=option_font,
         )
         option.grid(row=row, column=0, sticky="ew", pady=(8, 12))
         variable.trace_add("write", lambda *_: command())
@@ -821,13 +818,6 @@ class CaptionStudioApp:
             return "Apple SD Gothic Neo"
         if sys.platform.startswith("win"):
             return "Malgun Gothic"
-        return "Helvetica"
-
-    def _reference_font_family(self) -> str:
-        if sys.platform.startswith("win"):
-            return "Malgun Gothic"
-        if sys.platform == "darwin":
-            return "Apple SD Gothic Neo"
         return "Helvetica"
 
     def _preview_font_family(self) -> str:
