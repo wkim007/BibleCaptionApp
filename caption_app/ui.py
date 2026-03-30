@@ -951,8 +951,12 @@ class CaptionStudioApp:
         fill: str,
     ) -> None:
         radius = max(0, min(radius, (right - left) // 2, (bottom - top)))
+        if radius == 0:
+            canvas.create_rectangle(left, top, right, bottom, fill=fill, outline="")
+            return
+
         canvas.create_rectangle(left, top + radius, right, bottom, fill=fill, outline="")
-        canvas.create_rectangle(left + radius, top, right - radius, top + radius, fill=fill, outline="")
+        canvas.create_rectangle(left + radius, top, right - radius, bottom, fill=fill, outline="")
         canvas.create_arc(
             left,
             top,
@@ -964,13 +968,24 @@ class CaptionStudioApp:
             outline="",
             fill=fill,
         )
+        canvas.create_arc(
+            right - radius * 2,
+            top,
+            right,
+            top + radius * 2,
+            start=0,
+            extent=90,
+            style="pieslice",
+            outline="",
+            fill=fill,
+        )
 
     def _resolve_tag_layout(self, width: int, overlay_top: int, text: str) -> dict[str, object]:
         max_width = width - 28
         font_family = self.chapter_font_var.get().strip() or self._default_preview_font()
         font_size = self._chapter_font_size()
         horizontal_padding = 26
-        vertical_padding = 16
+        vertical_padding = 14
 
         for size in range(font_size, 13, -1):
             tag_font = tkfont.Font(family=font_family, size=size, weight="bold")
@@ -979,12 +994,13 @@ class CaptionStudioApp:
             if box_width <= max_width:
                 line_height = tag_font.metrics("linespace")
                 box_height = line_height + vertical_padding * 2
+                text_y = overlay_top - box_height / 2
                 return {
                     "font": tag_font,
                     "box_width": box_width,
                     "box_height": box_height,
                     "text_x": horizontal_padding,
-                    "text_y": overlay_top - box_height + vertical_padding,
+                    "text_y": text_y,
                     "box_top": overlay_top - box_height,
                     "box_bottom": overlay_top,
                 }
@@ -997,7 +1013,7 @@ class CaptionStudioApp:
             "box_width": max_width,
             "box_height": box_height,
             "text_x": horizontal_padding,
-            "text_y": overlay_top - box_height + vertical_padding,
+            "text_y": overlay_top - box_height / 2,
             "box_top": overlay_top - box_height,
             "box_bottom": overlay_top,
         }
