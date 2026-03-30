@@ -610,6 +610,10 @@ class CaptionStudioApp:
             activebackground="#4E59FF",
             activeforeground="#F3F3F3",
         )
+        if sys.platform.startswith("win"):
+            option_font = ("Malgun Gothic", 11)
+            option.configure(font=option_font)
+            option["menu"].configure(font=option_font)
         option.grid(row=row, column=0, sticky="ew", pady=(8, 12))
         variable.trace_add("write", lambda *_: command())
         return option
