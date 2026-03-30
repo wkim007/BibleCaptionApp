@@ -78,6 +78,7 @@ class CaptionStudioApp:
         self.books = self.repository.list_books()
         self.current_bundle: VerseBundle | None = None
         self.panel_visible = True
+        self.panel_width = 380
         self.playback_active = False
         self.subtitle_visible = True
         self.countdown_job: str | None = None
@@ -119,8 +120,9 @@ class CaptionStudioApp:
         self.duration_spinbox: tk.Spinbox
         self.play_button: tk.Label
         self.default_settings_button: tk.Label
-        self.root_frame: tk.PanedWindow
+        self.root_frame: tk.Frame
         self.stage_frame: tk.Frame
+        self.divider_frame: tk.Frame
         self.control_frame: tk.Frame
         self.preview_canvas: tk.Canvas
         self.reference_tag_id: int
@@ -134,6 +136,10 @@ class CaptionStudioApp:
         self._load_initial_state()
         self.root.bind_all("<Control-i>", self._toggle_panel_event)
         self.root.bind_all("<Control-I>", self._toggle_panel_event)
+        self.root.bind_all("<Left>", self._show_previous_verse)
+        self.root.bind_all("<Right>", self._show_next_verse)
+        self.root.bind_all("<Up>", self._show_next_book)
+        self.root.bind_all("<Down>", self._show_previous_book)
 
     def run(self) -> None:
         self.root.mainloop()
@@ -154,20 +160,13 @@ class CaptionStudioApp:
         self.root.config(menu=menu)
 
     def _build_layout(self) -> None:
-        self.root_frame = tk.PanedWindow(
-            self.root,
-            orient="horizontal",
-            bg="#111111",
-            bd=0,
-            relief="flat",
-            sashwidth=10,
-            sashrelief="flat",
-            showhandle=False,
-            opaqueresize=True,
-        )
+        self.root_frame = tk.Frame(self.root, bg="#111111")
         self.root_frame.pack(fill="both", expand=True)
+        self.root_frame.grid_rowconfigure(0, weight=1)
+        self.root_frame.grid_columnconfigure(0, weight=1)
 
         self.stage_frame = tk.Frame(self.root_frame, bg="#111111", padx=18, pady=18)
+        self.stage_frame.grid(row=0, column=0, sticky="nsew")
         self.stage_frame.grid_rowconfigure(0, weight=1)
         self.stage_frame.grid_columnconfigure(0, weight=1)
 
@@ -180,13 +179,17 @@ class CaptionStudioApp:
         self.preview_canvas.grid(row=0, column=0, sticky="nsew")
         self.preview_canvas.bind("<Configure>", self._redraw_preview)
 
-        self.control_frame = tk.Frame(self.root_frame, bg="#181818", padx=20, pady=20)
-        self.control_frame.grid_columnconfigure(0, weight=1)
-        self._configure_ttk_styles()
+        self.divider_frame = tk.Frame(self.root_frame, bg="#242424", width=8, cursor="sb_h_double_arrow")
+        self.divider_frame.grid(row=0, column=1, sticky="ns")
+        self.divider_frame.bind("<Button-1>", self._start_resize_panel)
+        self.divider_frame.bind("<B1-Motion>", self._resize_panel_drag)
 
-        self.root_frame.add(self.stage_frame, minsize=640)
-        self.root_frame.add(self.control_frame, minsize=320, width=380)
-        self.root.after(0, self._set_initial_sash)
+        self.control_frame = tk.Frame(self.root_frame, bg="#181818", padx=20, pady=20)
+        self.control_frame.grid(row=0, column=2, sticky="nsew")
+        self.control_frame.grid_columnconfigure(0, weight=1)
+        self.control_frame.grid_propagate(False)
+        self.control_frame.configure(width=self.panel_width)
+        self._configure_ttk_styles()
 
         header_frame = tk.Frame(self.control_frame, bg="#181818")
         header_frame.grid(row=0, column=0, sticky="ew")
@@ -625,6 +628,83 @@ class CaptionStudioApp:
             return None
         return int(value)
 
+    def _navigate_verse(self, direction: int) -> None:
+        book = self._selected_book()
+        chapter = self._selected_int(self.chapter_var)
+        verse = self._selected_int(self.verse_var)
+        if book is None or chapter is None or verse is None:
+            return
+
+        verses = self.repository.list_verses(book.book_id, chapter)
+        if not verses:
+            return
+
+        try:
+            current_index = verses.index(verse)
+        except ValueError:
+            current_index = 0
+
+        target_index = current_index + direction
+        if 0 <= target_index < len(verses):
+            self.verse_var.set(str(verses[target_index]))
+            return
+
+        if direction > 0:
+            chapters = self.repository.list_chapters(book.book_id)
+            if chapter < chapters[-1]:
+                next_chapter = chapter + 1
+                next_verses = self.repository.list_verses(book.book_id, next_chapter)
+                if next_verses:
+                    self.chapter_var.set(str(next_chapter))
+                    self.verse_var.set(str(next_verses[0]))
+            return
+
+        if chapter > 1:
+            previous_chapter = chapter - 1
+            previous_verses = self.repository.list_verses(book.book_id, previous_chapter)
+            if previous_verses:
+                self.chapter_var.set(str(previous_chapter))
+                self.verse_var.set(str(previous_verses[-1]))
+
+    def _show_previous_verse(self, event: object | None = None) -> None:
+        self._navigate_verse(-1)
+
+    def _show_next_verse(self, event: object | None = None) -> None:
+        self._navigate_verse(1)
+
+    def _navigate_book(self, direction: int) -> None:
+        book = self._selected_book()
+        chapter = self._selected_int(self.chapter_var)
+        verse = self._selected_int(self.verse_var)
+        if book is None or chapter is None or verse is None:
+            return
+
+        try:
+            current_index = next(index for index, item in enumerate(self.books) if item.book_id == book.book_id)
+        except StopIteration:
+            return
+
+        target_index = max(0, min(len(self.books) - 1, current_index + direction))
+        target_book = self.books[target_index]
+        if target_book.book_id == book.book_id:
+            return
+
+        target_chapter = min(chapter, target_book.chapter_count)
+        target_verses = self.repository.list_verses(target_book.book_id, target_chapter)
+        if not target_verses:
+            return
+        target_verse = min(verse, target_verses[-1])
+
+        self.book_var.set(self._book_label(target_book))
+        self.chapter_var.set(str(target_chapter))
+        self.verse_var.set(str(target_verse))
+
+    def _show_next_book(self, event: object | None = None) -> None:
+        self._navigate_book(1)
+
+    def _show_previous_book(self, event: object | None = None) -> None:
+        self._navigate_book(-1)
+
     def _book_label(self, book) -> str:
         return f"{book.book_id:02}  {book.korean_name} | {book.english_name}"
 
@@ -718,13 +798,16 @@ class CaptionStudioApp:
         self._tick_duration_playback()
         self._set_status("Subtitle playback started.")
 
-    def _set_initial_sash(self) -> None:
+    def _start_resize_panel(self, _: object | None = None) -> None:
+        self.root.update_idletasks()
+
+    def _resize_panel_drag(self, event: tk.Event) -> None:
         if not self.panel_visible:
             return
-        self.root.update_idletasks()
         total_width = self.root_frame.winfo_width()
-        if total_width > 420:
-            self.root_frame.sash_place(0, total_width - 380, 1)
+        new_width = max(280, min(640, total_width - event.x_root + self.root_frame.winfo_rootx()))
+        self.panel_width = new_width
+        self.control_frame.configure(width=self.panel_width)
 
     def _apply_default_settings_to_controls(self, redraw: bool = True) -> None:
         default_font = self._default_preview_font()
@@ -805,13 +888,13 @@ class CaptionStudioApp:
     def _set_panel_visible(self, visible: bool) -> None:
         self.panel_visible = visible
         if visible:
-            if str(self.control_frame) not in self.root_frame.panes():
-                self.root_frame.add(self.control_frame, minsize=320, width=380)
-                self.root.after(0, self._set_initial_sash)
+            self.divider_frame.grid()
+            self.control_frame.grid()
+            self.control_frame.configure(width=self.panel_width)
             self._set_status("Right panel shown. Press Ctrl+I to hide it.")
         else:
-            if str(self.control_frame) in self.root_frame.panes():
-                self.root_frame.forget(self.control_frame)
+            self.divider_frame.grid_remove()
+            self.control_frame.grid_remove()
             self._set_status("Right panel hidden. Press Ctrl+I to show it again.")
 
     def _set_menu_values(self, menu_widget: tk.OptionMenu, variable: tk.StringVar, values: list[str]) -> None:
@@ -881,6 +964,43 @@ class CaptionStudioApp:
             outline="",
             fill=fill,
         )
+
+    def _resolve_tag_layout(self, width: int, overlay_top: int, text: str) -> dict[str, object]:
+        max_width = width - 28
+        font_family = self.chapter_font_var.get().strip() or self._default_preview_font()
+        font_size = self._chapter_font_size()
+        horizontal_padding = 26
+        vertical_padding = 16
+
+        for size in range(font_size, 13, -1):
+            tag_font = tkfont.Font(family=font_family, size=size, weight="bold")
+            text_width = tag_font.measure(text)
+            box_width = min(max_width, text_width + horizontal_padding * 2)
+            if box_width <= max_width:
+                line_height = tag_font.metrics("linespace")
+                box_height = line_height + vertical_padding * 2
+                return {
+                    "font": tag_font,
+                    "box_width": box_width,
+                    "box_height": box_height,
+                    "text_x": horizontal_padding,
+                    "text_y": overlay_top - box_height + vertical_padding,
+                    "box_top": overlay_top - box_height,
+                    "box_bottom": overlay_top,
+                }
+
+        fallback_font = tkfont.Font(family=font_family, size=14, weight="bold")
+        line_height = fallback_font.metrics("linespace")
+        box_height = line_height + vertical_padding * 2
+        return {
+            "font": fallback_font,
+            "box_width": max_width,
+            "box_height": box_height,
+            "text_x": horizontal_padding,
+            "text_y": overlay_top - box_height + vertical_padding,
+            "box_top": overlay_top - box_height,
+            "box_bottom": overlay_top,
+        }
         canvas.create_arc(
             right - radius * 2,
             top,
@@ -1008,10 +1128,11 @@ class CaptionStudioApp:
         overlay_top = int(layout["overlay_top"])
         self._draw_gradient(canvas, width, overlay_top, height)
 
-        tag_width = min(max(420, len(tag_text) * 11), width - 36)
+        tag_layout = self._resolve_tag_layout(width, overlay_top, tag_text)
+        tag_width = int(tag_layout["box_width"])
         tag_left = 0
-        tag_top = overlay_top - 58
-        tag_bottom = overlay_top + 22
+        tag_top = int(tag_layout["box_top"])
+        tag_bottom = int(tag_layout["box_bottom"])
         self._draw_top_rounded_box(
             canvas,
             tag_left,
@@ -1022,12 +1143,12 @@ class CaptionStudioApp:
             fill=self.chapter_background_color_var.get(),
         )
         canvas.create_text(
-            28,
-            overlay_top - 18,
+            int(tag_layout["text_x"]),
+            int(tag_layout["text_y"]),
             anchor="w",
             text=tag_text,
             fill=self.chapter_text_color_var.get(),
-            font=(self.chapter_font_var.get().strip() or self._default_preview_font(), self._chapter_font_size(), "bold"),
+            font=tag_layout["font"],
         )
 
         text_left = 40
