@@ -213,6 +213,14 @@ class CaptionStudioApp:
             padx=12,
             pady=8,
         ).grid(row=0, column=1, sticky="ne")
+        tk.Label(
+            self.control_frame,
+            text="Ctrl + I will show/hide this panel",
+            bg="#181818",
+            fg="#D6D6D6",
+            anchor="w",
+            font=("Helvetica", 11, "bold"),
+        ).grid(row=1, column=0, sticky="ew", pady=(6, 16))
         self._make_section_label(self.control_frame, "Bible Caption Studio Color", 2)
         self._make_action_button(
             self.control_frame,
@@ -429,7 +437,7 @@ class CaptionStudioApp:
 
         self._make_action_button(
             self.control_frame,
-            text="Import Txt",
+            text="Import TXT",
             command=self._import_txt,
             bg="#252525",
             fg="#F8F8F8",
@@ -1028,6 +1036,8 @@ class CaptionStudioApp:
         font_weight: str = "normal",
     ) -> tuple[tkfont.Font, int]:
         preview_font = tkfont.Font(family=font_family, size=font_size, weight=font_weight)
+        if not text.strip():
+            return preview_font, 0
         line_spacing = preview_font.metrics("linespace")
         lines: list[str] = []
 
@@ -1148,7 +1158,7 @@ class CaptionStudioApp:
         base_font_size: int,
     ) -> dict[str, object]:
         text_width = width - 80
-        minimum_overlay_top = int(height * 0.52)
+        minimum_overlay_top = int(height * 0.35)
         size_candidates: list[tuple[int, int, int]] = []
 
         for size_step in range(0, 11):
@@ -1162,19 +1172,16 @@ class CaptionStudioApp:
             english_font, english_height = self._measure_text_block(texts[1], font_family, english_size, text_width)
             spanish_font, spanish_height = self._measure_text_block(texts[2], font_family, spanish_size, text_width)
 
-            top_padding = 28
-            between_gap = 14
-            bottom_padding = 18
-            content_height = (
-                top_padding
-                + korean_height
-                + between_gap
-                + english_height
-                + between_gap
-                + spanish_height
-                + bottom_padding
-            )
-            overlay_height = max(220, content_height)
+            top_padding = 18
+            between_gap = 8
+            bottom_padding = 12
+            active_heights = [value for value in (korean_height, english_height, spanish_height) if value > 0]
+            if active_heights:
+                content_height = top_padding + sum(active_heights) + between_gap * (len(active_heights) - 1) + bottom_padding
+            else:
+                content_height = top_padding + bottom_padding
+            minimum_overlay_height = 52 + (18 * max(len(active_heights), 1))
+            overlay_height = max(minimum_overlay_height, content_height)
             overlay_top = height - overlay_height
 
             if overlay_top >= minimum_overlay_top:
@@ -1192,11 +1199,20 @@ class CaptionStudioApp:
                     "between_gap": between_gap,
                 }
 
-        korean_font, korean_height = self._measure_text_block(texts[0], font_family, max(18, base_font_size - 10), text_width)
-        english_font, english_height = self._measure_text_block(texts[1], font_family, max(17, base_font_size - 11), text_width)
-        spanish_font, spanish_height = self._measure_text_block(texts[2], font_family, max(16, base_font_size - 12), text_width)
-        overlay_top = minimum_overlay_top
-        overlay_height = height - overlay_top
+        korean_font, korean_height = self._measure_text_block(texts[0], font_family, max(18, base_font_size - 4), text_width)
+        english_font, english_height = self._measure_text_block(texts[1], font_family, max(17, base_font_size - 5), text_width)
+        spanish_font, spanish_height = self._measure_text_block(texts[2], font_family, max(16, base_font_size - 6), text_width)
+        top_padding = 18
+        between_gap = 8
+        bottom_padding = 12
+        active_heights = [value for value in (korean_height, english_height, spanish_height) if value > 0]
+        content_height = (
+            top_padding + sum(active_heights) + between_gap * max(len(active_heights) - 1, 0) + bottom_padding
+            if active_heights
+            else top_padding + bottom_padding
+        )
+        overlay_height = min(height - 40, max(70, content_height))
+        overlay_top = height - overlay_height
         return {
             "overlay_top": overlay_top,
             "overlay_height": overlay_height,
@@ -1207,8 +1223,8 @@ class CaptionStudioApp:
             "korean_height": korean_height,
             "english_height": english_height,
             "spanish_height": spanish_height,
-            "top_padding": 24,
-            "between_gap": 12,
+            "top_padding": top_padding,
+            "between_gap": between_gap,
         }
 
     def _redraw_preview(self, _: object | None = None) -> None:
