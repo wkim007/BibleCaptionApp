@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tkinter as tk
+import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -502,6 +503,108 @@ class CaptionStudioApp:
         else:
             variable.set("")
 
+    def _measure_text_block(
+        self,
+        text: str,
+        font_family: str,
+        font_size: int,
+        text_width: int,
+        font_weight: str = "normal",
+    ) -> tuple[tkfont.Font, int]:
+        preview_font = tkfont.Font(family=font_family, size=font_size, weight=font_weight)
+        line_spacing = preview_font.metrics("linespace")
+        lines: list[str] = []
+
+        for paragraph in text.split("\n"):
+            words = paragraph.split()
+            if not words:
+                lines.append("")
+                continue
+
+            current_line = words[0]
+            for word in words[1:]:
+                trial = f"{current_line} {word}"
+                if preview_font.measure(trial) <= text_width:
+                    current_line = trial
+                else:
+                    lines.append(current_line)
+                    current_line = word
+            lines.append(current_line)
+
+        height = max(line_spacing * max(len(lines), 1), line_spacing)
+        return preview_font, height
+
+    def _resolve_overlay_layout(
+        self,
+        width: int,
+        height: int,
+        font_family: str,
+        texts: tuple[str, str, str],
+    ) -> dict[str, object]:
+        text_width = width - 80
+        minimum_overlay_top = int(height * 0.52)
+        size_candidates: list[tuple[int, int, int]] = []
+
+        for size_step in range(0, 11):
+            korean_size = max(20, min(35, int(width * 0.028)) - size_step)
+            english_size = max(19, min(33, int(width * 0.027)) - size_step)
+            spanish_size = max(18, min(31, int(width * 0.026)) - size_step)
+            size_candidates.append((korean_size, english_size, spanish_size))
+
+        for korean_size, english_size, spanish_size in size_candidates:
+            korean_font, korean_height = self._measure_text_block(texts[0], font_family, korean_size, text_width)
+            english_font, english_height = self._measure_text_block(texts[1], font_family, english_size, text_width)
+            spanish_font, spanish_height = self._measure_text_block(texts[2], font_family, spanish_size, text_width)
+
+            top_padding = 28
+            between_gap = 14
+            bottom_padding = 18
+            content_height = (
+                top_padding
+                + korean_height
+                + between_gap
+                + english_height
+                + between_gap
+                + spanish_height
+                + bottom_padding
+            )
+            overlay_height = max(220, content_height)
+            overlay_top = height - overlay_height
+
+            if overlay_top >= minimum_overlay_top:
+                return {
+                    "overlay_top": overlay_top,
+                    "overlay_height": overlay_height,
+                    "text_width": text_width,
+                    "korean_font": korean_font,
+                    "english_font": english_font,
+                    "spanish_font": spanish_font,
+                    "korean_height": korean_height,
+                    "english_height": english_height,
+                    "spanish_height": spanish_height,
+                    "top_padding": top_padding,
+                    "between_gap": between_gap,
+                }
+
+        korean_font, korean_height = self._measure_text_block(texts[0], font_family, 20, text_width)
+        english_font, english_height = self._measure_text_block(texts[1], font_family, 19, text_width)
+        spanish_font, spanish_height = self._measure_text_block(texts[2], font_family, 18, text_width)
+        overlay_top = minimum_overlay_top
+        overlay_height = height - overlay_top
+        return {
+            "overlay_top": overlay_top,
+            "overlay_height": overlay_height,
+            "text_width": text_width,
+            "korean_font": korean_font,
+            "english_font": english_font,
+            "spanish_font": spanish_font,
+            "korean_height": korean_height,
+            "english_height": english_height,
+            "spanish_height": spanish_height,
+            "top_padding": 24,
+            "between_gap": 12,
+        }
+
     def _redraw_preview(self, _: object | None = None) -> None:
         canvas = self.preview_canvas
         canvas.delete("all")
@@ -545,6 +648,10 @@ class CaptionStudioApp:
             english = self.current_bundle.english_text
             spanish = self.current_bundle.spanish_text
 
+        layout = self._resolve_overlay_layout(width, height, font_family, (korean, english, spanish))
+        overlay_top = int(layout["overlay_top"])
+        self._draw_gradient(canvas, width, overlay_top, height)
+
         tag_width = min(max(360, len(tag_text) * 12), width - 80)
         canvas.create_rectangle(
             24,
@@ -564,36 +671,36 @@ class CaptionStudioApp:
         )
 
         text_left = 40
-        text_width = width - 80
-        korean_font_size = max(26, min(35, int(width * 0.028)))
-        english_font_size = max(25, min(33, int(width * 0.027)))
-        spanish_font_size = max(24, min(31, int(width * 0.026)))
+        text_width = int(layout["text_width"])
+        current_y = overlay_top + int(layout["top_padding"])
         canvas.create_text(
             text_left,
-            overlay_top + 36,
+            current_y,
             anchor="nw",
             width=text_width,
             text=korean,
             fill="#F3F3F3",
-            font=(font_family, korean_font_size),
+            font=layout["korean_font"],
         )
+        current_y += int(layout["korean_height"]) + int(layout["between_gap"])
         canvas.create_text(
             text_left,
-            overlay_top + 102,
+            current_y,
             anchor="nw",
             width=text_width,
             text=english,
             fill="#FFF36E",
-            font=(font_family, english_font_size),
+            font=layout["english_font"],
         )
+        current_y += int(layout["english_height"]) + int(layout["between_gap"])
         canvas.create_text(
             text_left,
-            overlay_top + 164,
+            current_y,
             anchor="nw",
             width=text_width,
             text=spanish,
             fill="#FFC6A4",
-            font=(font_family, spanish_font_size),
+            font=layout["spanish_font"],
         )
 
     def _draw_gradient(self, canvas: tk.Canvas, width: int, top: int, bottom: int) -> None:
