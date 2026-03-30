@@ -78,6 +78,7 @@ class CaptionStudioApp:
         self.repository = BibleRepository()
         self.books = self.repository.list_books()
         self.current_bundle: VerseBundle | None = None
+        self.imported_content: dict[str, str] | None = None
         self.panel_visible = True
         self.panel_width = 380
         self.playback_active = False
@@ -155,6 +156,7 @@ class CaptionStudioApp:
         file_menu.add_command(label="Choose Video...", command=self._choose_video)
         file_menu.add_command(label="Open Player", command=self._open_in_player)
         file_menu.add_separator()
+        file_menu.add_command(label="Import TXT...", command=self._import_txt)
         file_menu.add_command(label="Export Current Verse as TXT...", command=self._export_current_verse_txt)
         file_menu.add_command(label="Copy Current Verse", command=self._copy_current_verse)
         file_menu.add_separator()
@@ -427,6 +429,16 @@ class CaptionStudioApp:
 
         self._make_action_button(
             self.control_frame,
+            text="Import Txt",
+            command=self._import_txt,
+            bg="#252525",
+            fg="#F8F8F8",
+            hover_bg="#313131",
+            padx=14,
+            pady=12,
+        ).grid(row=23, column=0, sticky="ew", pady=(12, 8))
+        self._make_action_button(
+            self.control_frame,
             text="Copy Verse Text",
             command=self._copy_current_verse,
             bg="#252525",
@@ -434,7 +446,7 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=23, column=0, sticky="ew", pady=(12, 8))
+        ).grid(row=24, column=0, sticky="ew", pady=(0, 8))
         self.default_settings_button = self._make_action_button(
             self.control_frame,
             text="Default Settings",
@@ -445,7 +457,7 @@ class CaptionStudioApp:
             padx=14,
             pady=12,
         )
-        self.default_settings_button.grid(row=24, column=0, sticky="ew")
+        self.default_settings_button.grid(row=25, column=0, sticky="ew")
 
         status = tk.Label(
             self.control_frame,
@@ -457,7 +469,7 @@ class CaptionStudioApp:
             fg="#B8B8B8",
             font=("Helvetica", 11),
         )
-        status.grid(row=25, column=0, sticky="ew", pady=(22, 0))
+        status.grid(row=26, column=0, sticky="ew", pady=(22, 0))
 
     def _make_title(self, parent: tk.Widget, text: str, row: int) -> None:
         tk.Label(
@@ -622,6 +634,7 @@ class CaptionStudioApp:
 
     def _refresh_selected_verse(self) -> None:
         self._stop_duration_playback(show_subtitle=True, reset_countdown=True)
+        self.imported_content = None
         book = self._selected_book()
         chapter = self._selected_int(self.chapter_var)
         verse = self._selected_int(self.verse_var)
@@ -804,6 +817,15 @@ class CaptionStudioApp:
         return selected_font or self._default_preview_font()
 
     def _selected_language_entries(self) -> list[tuple[str, str, str]]:
+        if self.imported_content is not None:
+            entries: list[tuple[str, str, str]] = []
+            if self.show_korean_var.get():
+                entries.append(("", self.imported_content["korean"], self.korean_text_color_var.get()))
+            if self.show_english_var.get():
+                entries.append(("", self.imported_content["english"], self.english_text_color_var.get()))
+            if self.show_spanish_var.get():
+                entries.append(("", self.imported_content["spanish"], self.spanish_text_color_var.get()))
+            return entries
         if self.current_bundle is None:
             return []
 
@@ -818,6 +840,8 @@ class CaptionStudioApp:
         return entries
 
     def _build_reference_label(self) -> str:
+        if self.imported_content is not None:
+            return self.imported_content["reference"]
         if self.current_bundle is None:
             return "Select a verse"
 
@@ -911,6 +935,7 @@ class CaptionStudioApp:
         self.duration_var.set("6.0")
         self.countdown_var.set("6.0s")
         self.subtitle_visible = True
+        self.imported_content = None
         self.chapter_font_combo.set(self.chapter_font_var.get())
         self.chapter_font_size_combo.set(self.chapter_font_size_var.get())
         self.font_combo.set(self.text_font_var.get())
@@ -1323,12 +1348,12 @@ class CaptionStudioApp:
         self._set_status("Opened video in the default media player.")
 
     def _export_current_verse_txt(self) -> None:
-        if self.current_bundle is None:
+        if self.current_bundle is None and self.imported_content is None:
             messagebox.showerror("Export failed", "Select a verse before exporting text.")
             return
 
         suggested_name = "verse_caption.txt"
-        if self.current_bundle is not None:
+        if self.current_bundle is not None and self.imported_content is None:
             ref = self.current_bundle.reference
             suggested_name = f"{ref.book_english}_{ref.chapter_num}_{ref.verse_num}.txt"
 
@@ -1341,12 +1366,23 @@ class CaptionStudioApp:
         if not path:
             return
 
+        if self.imported_content is not None:
+            reference_label = self.imported_content["reference"]
+            korean_text = self.imported_content["korean"]
+            english_text = self.imported_content["english"]
+            spanish_text = self.imported_content["spanish"]
+        else:
+            reference_label = self.current_bundle.reference.label
+            korean_text = self.current_bundle.korean_text
+            english_text = self.current_bundle.english_text
+            spanish_text = self.current_bundle.spanish_text
+
         payload = "\n".join(
             [
-                self.current_bundle.reference.label,
-                self.current_bundle.korean_text,
-                self.current_bundle.english_text,
-                self.current_bundle.spanish_text,
+                reference_label,
+                korean_text,
+                english_text,
+                spanish_text,
             ]
         )
         try:
@@ -1358,21 +1394,66 @@ class CaptionStudioApp:
         self._set_status(f"Exported text: {Path(path).name}")
 
     def _copy_current_verse(self) -> None:
-        if self.current_bundle is None:
+        if self.current_bundle is None and self.imported_content is None:
             messagebox.showerror("Nothing to copy", "Select a verse first.")
             return
 
+        if self.imported_content is not None:
+            reference_label = self.imported_content["reference"]
+            korean_text = self.imported_content["korean"]
+            english_text = self.imported_content["english"]
+            spanish_text = self.imported_content["spanish"]
+        else:
+            reference_label = self.current_bundle.reference.label
+            korean_text = self.current_bundle.korean_text
+            english_text = self.current_bundle.english_text
+            spanish_text = self.current_bundle.spanish_text
+
         payload = "\n".join(
             [
-                self.current_bundle.reference.label,
-                self.current_bundle.korean_text,
-                self.current_bundle.english_text,
-                self.current_bundle.spanish_text,
+                reference_label,
+                korean_text,
+                english_text,
+                spanish_text,
             ]
         )
         self.root.clipboard_clear()
         self.root.clipboard_append(payload)
         self._set_status("Copied current verse to clipboard.")
+
+    def _import_txt(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Import text",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+
+        try:
+            content = Path(path).read_text(encoding="utf-8").strip()
+        except Exception as error:
+            messagebox.showerror("Import failed", f"Could not open text file.\n\n{error}")
+            return
+
+        lines = [line.strip() for line in content.splitlines() if line.strip()]
+        if len(lines) != 4:
+            messagebox.showwarning("Invalid format", "invalid format")
+            return
+
+        reference, korean_text, english_text, spanish_text = lines
+        if "|" not in reference or ":" not in reference:
+            messagebox.showwarning("Invalid format", "invalid format")
+            return
+
+        self.imported_content = {
+            "reference": reference,
+            "korean": korean_text,
+            "english": english_text,
+            "spanish": spanish_text,
+        }
+        self._stop_duration_playback(show_subtitle=True, reset_countdown=True)
+        self._redraw_preview()
+        self._set_status(f"Imported text: {Path(path).name}")
 
     def _set_status(self, message: str) -> None:
         self.status_var.set(message)
