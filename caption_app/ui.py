@@ -6,12 +6,12 @@ import sys
 import tkinter as tk
 import tkinter.colorchooser as colorchooser
 import tkinter.font as tkfont
+import time
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from caption_app.db import BibleRepository, DB_PATH
-from caption_app.models import CaptionEntry, VerseBundle
-from caption_app.srt import format_srt
+from caption_app.models import VerseBundle
 
 FONT_CHOICES = sorted(
     [
@@ -78,6 +78,10 @@ class CaptionStudioApp:
         self.books = self.repository.list_books()
         self.current_bundle: VerseBundle | None = None
         self.panel_visible = True
+        self.playback_active = False
+        self.subtitle_visible = True
+        self.countdown_job: str | None = None
+        self.countdown_end_time: float | None = None
 
         self.root = tk.Tk()
         self.root.title("Bible DSK")
@@ -95,6 +99,7 @@ class CaptionStudioApp:
         self.korean_text_color_var = tk.StringVar(value="#F3F3F3")
         self.english_text_color_var = tk.StringVar(value="#FFF36E")
         self.spanish_text_color_var = tk.StringVar(value="#FFC6A4")
+        self.countdown_var = tk.StringVar(value="6.0s")
         self.status_var = tk.StringVar(value=f"Connected to {DB_PATH.name}")
 
         self.book_picker: tk.OptionMenu
@@ -102,6 +107,9 @@ class CaptionStudioApp:
         self.verse_picker: tk.OptionMenu
         self.font_combo: ttk.Combobox
         self.font_size_combo: ttk.Combobox
+        self.duration_spinbox: tk.Spinbox
+        self.play_button: tk.Label
+        self.reset_button: tk.Label
         self.root_frame: tk.Frame
         self.stage_frame: tk.Frame
         self.control_frame: tk.Frame
@@ -128,7 +136,7 @@ class CaptionStudioApp:
         file_menu.add_command(label="Choose Video...", command=self._choose_video)
         file_menu.add_command(label="Open Player", command=self._open_in_player)
         file_menu.add_separator()
-        file_menu.add_command(label="Export Current Verse as SRT...", command=self._export_current_verse_srt)
+        file_menu.add_command(label="Export Current Verse as TXT...", command=self._export_current_verse_txt)
         file_menu.add_command(label="Copy Current Verse", command=self._copy_current_verse)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.destroy)
@@ -178,41 +186,12 @@ class CaptionStudioApp:
             padx=12,
             pady=8,
         ).grid(row=0, column=1, sticky="ne")
-        self._make_subtitle(self.control_frame, "Select a verse from SQLite and render it as a subtitle overlay.", 1)
+        self._make_section_label(self.control_frame, "Reference", 2)
+        self.book_picker = self._make_option_menu(self.control_frame, 3, self.book_var, self._on_book_change)
+        self.chapter_picker = self._make_option_menu(self.control_frame, 4, self.chapter_var, self._on_chapter_change)
+        self.verse_picker = self._make_option_menu(self.control_frame, 5, self.verse_var, self._on_verse_change)
 
-        self._make_section_label(self.control_frame, "Video", 2)
-        video_row = tk.Frame(self.control_frame, bg="#181818")
-        video_row.grid(row=3, column=0, sticky="ew", pady=(8, 18))
-        video_row.grid_columnconfigure(0, weight=1)
-
-        tk.Entry(
-            video_row,
-            textvariable=self.video_path_var,
-            bg="#242424",
-            fg="#F3F3F3",
-            insertbackground="#F3F3F3",
-            relief="flat",
-            highlightthickness=1,
-            highlightbackground="#343434",
-            highlightcolor="#4E59FF",
-        ).grid(row=0, column=0, sticky="ew", padx=(0, 8), ipady=8)
-        self._make_action_button(
-            video_row,
-            text="Browse",
-            command=self._choose_video,
-            bg="#F3F3F3",
-            fg="#111111",
-            hover_bg="#FFFFFF",
-            padx=18,
-            pady=10,
-        ).grid(row=0, column=1)
-
-        self._make_section_label(self.control_frame, "Reference", 4)
-        self.book_picker = self._make_option_menu(self.control_frame, 5, self.book_var, self._on_book_change)
-        self.chapter_picker = self._make_option_menu(self.control_frame, 6, self.chapter_var, self._on_chapter_change)
-        self.verse_picker = self._make_option_menu(self.control_frame, 7, self.verse_var, self._on_verse_change)
-
-        self._make_section_label(self.control_frame, "Text Font", 8)
+        self._make_section_label(self.control_frame, "Text Font", 6)
         self.font_combo = ttk.Combobox(
             self.control_frame,
             textvariable=self.text_font_var,
@@ -220,10 +199,10 @@ class CaptionStudioApp:
             state="readonly",
             style="BibleDisk.TCombobox",
         )
-        self.font_combo.grid(row=9, column=0, sticky="ew", pady=(8, 18), ipady=6)
+        self.font_combo.grid(row=7, column=0, sticky="ew", pady=(8, 18), ipady=6)
         self.font_combo.bind("<<ComboboxSelected>>", self._on_font_change)
 
-        self._make_section_label(self.control_frame, "Text Font Size", 10)
+        self._make_section_label(self.control_frame, "Text Font Size", 8)
         self.font_size_combo = ttk.Combobox(
             self.control_frame,
             textvariable=self.text_font_size_var,
@@ -231,10 +210,10 @@ class CaptionStudioApp:
             state="readonly",
             style="BibleDisk.TCombobox",
         )
-        self.font_size_combo.grid(row=11, column=0, sticky="ew", pady=(8, 18), ipady=6)
+        self.font_size_combo.grid(row=9, column=0, sticky="ew", pady=(8, 18), ipady=6)
         self.font_size_combo.bind("<<ComboboxSelected>>", self._on_font_change)
 
-        self._make_section_label(self.control_frame, "Text Colors", 12)
+        self._make_section_label(self.control_frame, "Text Colors", 10)
         self._make_action_button(
             self.control_frame,
             text="Korean Color",
@@ -244,7 +223,7 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=13, column=0, sticky="ew", pady=(8, 8))
+        ).grid(row=11, column=0, sticky="ew", pady=(8, 8))
         self._make_action_button(
             self.control_frame,
             text="English Color",
@@ -254,7 +233,7 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=14, column=0, sticky="ew", pady=(0, 8))
+        ).grid(row=12, column=0, sticky="ew", pady=(0, 8))
         self._make_action_button(
             self.control_frame,
             text="Spanish Color",
@@ -264,23 +243,69 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=15, column=0, sticky="ew", pady=(0, 18))
+        ).grid(row=13, column=0, sticky="ew", pady=(0, 18))
 
-        self._make_section_label(self.control_frame, "Subtitle Duration (seconds)", 16)
-        tk.Entry(
-            self.control_frame,
+        self._make_section_label(self.control_frame, "Caption Duration (seconds)", 14)
+        duration_row = tk.Frame(self.control_frame, bg="#181818")
+        duration_row.grid(row=15, column=0, sticky="ew", pady=(8, 8))
+        duration_row.grid_columnconfigure(0, weight=1)
+        duration_row.grid_columnconfigure(1, weight=0)
+        duration_row.grid_columnconfigure(2, weight=0)
+        self.duration_spinbox = tk.Spinbox(
+            duration_row,
+            from_=1.0,
+            to=60.0,
+            increment=0.5,
+            format="%.1f",
             textvariable=self.duration_var,
+            command=self._on_duration_change,
             bg="#242424",
             fg="#F3F3F3",
+            buttonbackground="#2A2A2A",
             insertbackground="#F3F3F3",
             relief="flat",
             highlightthickness=1,
             highlightbackground="#343434",
             highlightcolor="#4E59FF",
-        ).grid(row=17, column=0, sticky="ew", ipady=8, pady=(8, 18))
+        )
+        self.duration_spinbox.grid(row=0, column=0, sticky="ew", padx=(0, 8), ipady=8)
+        self.duration_spinbox.bind("<FocusOut>", self._on_duration_change)
+        self.duration_spinbox.bind("<Return>", self._on_duration_change)
+        self.play_button = self._make_action_button(
+            duration_row,
+            text="Play",
+            command=self._toggle_duration_playback,
+            bg="#364BFF",
+            fg="#F8F8F8",
+            hover_bg="#4358FF",
+            padx=18,
+            pady=10,
+        )
+        self.play_button.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        self.reset_button = self._make_action_button(
+            duration_row,
+            text="Reset",
+            command=self._reset_duration_playback,
+            bg="#252525",
+            fg="#F8F8F8",
+            hover_bg="#313131",
+            padx=18,
+            pady=10,
+        )
+        self.reset_button.grid(row=0, column=2, sticky="ew")
+
+        tk.Label(
+            self.control_frame,
+            textvariable=self.countdown_var,
+            anchor="w",
+            justify="left",
+            bg="#181818",
+            fg="#B8B8B8",
+            font=("Helvetica", 11, "bold"),
+        ).grid(row=16, column=0, sticky="ew", pady=(0, 18))
 
         action_frame = tk.Frame(self.control_frame, bg="#181818")
-        action_frame.grid(row=18, column=0, sticky="ew")
+        action_frame.grid(row=17, column=0, sticky="ew")
         action_frame.grid_columnconfigure(0, weight=1)
         action_frame.grid_columnconfigure(1, weight=1)
 
@@ -296,8 +321,8 @@ class CaptionStudioApp:
         ).grid(row=0, column=0, sticky="ew", padx=(0, 6))
         self._make_action_button(
             action_frame,
-            text="Export SRT",
-            command=self._export_current_verse_srt,
+            text="Export TXT",
+            command=self._export_current_verse_txt,
             bg="#252525",
             fg="#F8F8F8",
             hover_bg="#313131",
@@ -314,18 +339,7 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=19, column=0, sticky="ew", pady=(12, 8))
-
-        self._make_action_button(
-            self.control_frame,
-            text="Open Video Player",
-            command=self._open_in_player,
-            bg="#252525",
-            fg="#F8F8F8",
-            hover_bg="#313131",
-            padx=14,
-            pady=12,
-        ).grid(row=20, column=0, sticky="ew")
+        ).grid(row=18, column=0, sticky="ew", pady=(12, 8))
 
         status = tk.Label(
             self.control_frame,
@@ -337,7 +351,7 @@ class CaptionStudioApp:
             fg="#B8B8B8",
             font=("Helvetica", 11),
         )
-        status.grid(row=21, column=0, sticky="ew", pady=(22, 0))
+        status.grid(row=19, column=0, sticky="ew", pady=(22, 0))
 
     def _make_title(self, parent: tk.Widget, text: str, row: int) -> None:
         tk.Label(
@@ -460,6 +474,7 @@ class CaptionStudioApp:
             raise RuntimeError("The SQLite database does not contain any Bible books.")
         self.font_combo.set(self.text_font_var.get())
         self.font_size_combo.set(self.text_font_size_var.get())
+        self._on_duration_change()
         self._set_menu_values(self.book_picker, self.book_var, [self._book_label(book) for book in self.books])
 
     def _on_book_change(self) -> None:
@@ -482,6 +497,7 @@ class CaptionStudioApp:
             self._refresh_selected_verse()
 
     def _refresh_selected_verse(self) -> None:
+        self._stop_duration_playback(show_subtitle=True, reset_countdown=True)
         book = self._selected_book()
         chapter = self._selected_int(self.chapter_var)
         verse = self._selected_int(self.verse_var)
@@ -536,6 +552,78 @@ class CaptionStudioApp:
             return max(18, min(48, int(self.text_font_size_var.get().strip())))
         except ValueError:
             return 30
+
+    def _normalized_duration(self) -> float:
+        try:
+            duration = float(self.duration_var.get().strip())
+        except ValueError:
+            duration = 6.0
+        duration = max(1.0, min(60.0, duration))
+        return round(duration, 1)
+
+    def _on_duration_change(self, _: object | None = None) -> None:
+        duration = self._normalized_duration()
+        self.duration_var.set(f"{duration:.1f}")
+        if not self.playback_active:
+            self.countdown_var.set(f"{duration:.1f}s")
+
+    def _toggle_duration_playback(self) -> None:
+        if self.playback_active:
+            self._stop_duration_playback(show_subtitle=True, reset_countdown=True)
+            self._set_status("Subtitle playback stopped.")
+            return
+
+        if self.current_bundle is None:
+            messagebox.showerror("No verse selected", "Select a verse before starting subtitle playback.")
+            return
+
+        duration = self._normalized_duration()
+        self.duration_var.set(f"{duration:.1f}")
+        self.subtitle_visible = True
+        self.playback_active = True
+        self.countdown_end_time = time.monotonic() + duration
+        self._update_play_button_text("Stop")
+        self._tick_duration_playback()
+        self._set_status("Subtitle playback started.")
+
+    def _reset_duration_playback(self) -> None:
+        self._stop_duration_playback(show_subtitle=True, reset_countdown=True)
+        self._set_status("Subtitle playback reset.")
+
+    def _tick_duration_playback(self) -> None:
+        if not self.playback_active or self.countdown_end_time is None:
+            return
+
+        remaining = max(0.0, self.countdown_end_time - time.monotonic())
+        self.countdown_var.set(f"{remaining:.1f}s")
+        self.subtitle_visible = remaining > 0.0
+        self._redraw_preview()
+
+        if remaining <= 0.0:
+            self.playback_active = False
+            self.countdown_end_time = None
+            self.countdown_job = None
+            self._update_play_button_text("Play")
+            self._set_status("Subtitle playback finished.")
+            return
+
+        self.countdown_job = self.root.after(100, self._tick_duration_playback)
+
+    def _stop_duration_playback(self, show_subtitle: bool, reset_countdown: bool) -> None:
+        if self.countdown_job is not None:
+            self.root.after_cancel(self.countdown_job)
+            self.countdown_job = None
+        self.playback_active = False
+        self.countdown_end_time = None
+        self.subtitle_visible = show_subtitle
+        self._update_play_button_text("Play")
+        if reset_countdown:
+            duration = self._normalized_duration()
+            self.countdown_var.set(f"{duration:.1f}s")
+        self._redraw_preview()
+
+    def _update_play_button_text(self, text: str) -> None:
+        self.play_button.configure(text=text)
 
     def _toggle_panel_event(self, _: object | None = None) -> None:
         self._set_panel_visible(not self.panel_visible)
@@ -700,9 +788,8 @@ class CaptionStudioApp:
                 font=("Helvetica", 11),
             )
 
-        overlay_height = min(280, int(height * 0.34))
-        overlay_top = height - overlay_height
-        self._draw_gradient(canvas, width, overlay_top, height)
+        if not self.subtitle_visible:
+            return
 
         tag_text = "Select a verse"
         korean = "Choose a book, chapter, and verse from the SQLite Bible database."
@@ -819,59 +906,40 @@ class CaptionStudioApp:
 
         self._set_status("Opened video in the default media player.")
 
-    def _current_caption_entry(self) -> CaptionEntry:
+    def _export_current_verse_txt(self) -> None:
         if self.current_bundle is None:
-            raise ValueError("Select a verse before exporting subtitles.")
-
-        try:
-            duration_seconds = float(self.duration_var.get().strip())
-        except ValueError as error:
-            raise ValueError("Duration must be a number in seconds.") from error
-
-        if duration_seconds <= 0:
-            raise ValueError("Duration must be greater than zero.")
-
-        text = "\n".join(
-            [
-                self.current_bundle.korean_text,
-                self.current_bundle.english_text,
-                self.current_bundle.spanish_text,
-            ]
-        ).strip()
-        return CaptionEntry(
-            start_ms=0,
-            end_ms=int(duration_seconds * 1000),
-            text=text,
-        )
-
-    def _export_current_verse_srt(self) -> None:
-        try:
-            entry = self._current_caption_entry()
-        except ValueError as error:
-            messagebox.showerror("Export failed", str(error))
+            messagebox.showerror("Export failed", "Select a verse before exporting text.")
             return
 
-        suggested_name = "verse_caption.srt"
+        suggested_name = "verse_caption.txt"
         if self.current_bundle is not None:
             ref = self.current_bundle.reference
-            suggested_name = f"{ref.book_english}_{ref.chapter_num}_{ref.verse_num}.srt"
+            suggested_name = f"{ref.book_english}_{ref.chapter_num}_{ref.verse_num}.txt"
 
         path = filedialog.asksaveasfilename(
-            title="Export subtitles",
-            defaultextension=".srt",
+            title="Export text",
+            defaultextension=".txt",
             initialfile=suggested_name,
-            filetypes=[("SubRip subtitles", "*.srt")],
+            filetypes=[("Text files", "*.txt")],
         )
         if not path:
             return
 
+        payload = "\n".join(
+            [
+                self.current_bundle.reference.label,
+                self.current_bundle.korean_text,
+                self.current_bundle.english_text,
+                self.current_bundle.spanish_text,
+            ]
+        )
         try:
-            Path(path).write_text(format_srt([entry]), encoding="utf-8")
+            Path(path).write_text(payload, encoding="utf-8")
         except Exception as error:
-            messagebox.showerror("Export failed", f"Could not export subtitles.\n\n{error}")
+            messagebox.showerror("Export failed", f"Could not export text.\n\n{error}")
             return
 
-        self._set_status(f"Exported subtitle: {Path(path).name}")
+        self._set_status(f"Exported text: {Path(path).name}")
 
     def _copy_current_verse(self) -> None:
         if self.current_bundle is None:
