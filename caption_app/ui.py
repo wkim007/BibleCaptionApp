@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tkinter as tk
+import tkinter.colorchooser as colorchooser
 import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -68,6 +69,8 @@ FONT_CHOICES = sorted(
     key=str.casefold,
 )
 
+FONT_SIZE_CHOICES = [str(size) for size in range(18, 49, 2)]
+
 
 class CaptionStudioApp:
     def __init__(self) -> None:
@@ -87,13 +90,18 @@ class CaptionStudioApp:
         self.verse_var = tk.StringVar()
         self.duration_var = tk.StringVar(value="6.0")
         self.text_font_var = tk.StringVar(value=self._default_preview_font())
+        self.text_font_size_var = tk.StringVar(value="30")
         self.video_path_var = tk.StringVar()
+        self.korean_text_color_var = tk.StringVar(value="#F3F3F3")
+        self.english_text_color_var = tk.StringVar(value="#FFF36E")
+        self.spanish_text_color_var = tk.StringVar(value="#FFC6A4")
         self.status_var = tk.StringVar(value=f"Connected to {DB_PATH.name}")
 
         self.book_picker: tk.OptionMenu
         self.chapter_picker: tk.OptionMenu
         self.verse_picker: tk.OptionMenu
         self.font_combo: ttk.Combobox
+        self.font_size_combo: ttk.Combobox
         self.root_frame: tk.Frame
         self.stage_frame: tk.Frame
         self.control_frame: tk.Frame
@@ -215,7 +223,50 @@ class CaptionStudioApp:
         self.font_combo.grid(row=9, column=0, sticky="ew", pady=(8, 18), ipady=6)
         self.font_combo.bind("<<ComboboxSelected>>", self._on_font_change)
 
-        self._make_section_label(self.control_frame, "Subtitle Duration (seconds)", 10)
+        self._make_section_label(self.control_frame, "Text Font Size", 10)
+        self.font_size_combo = ttk.Combobox(
+            self.control_frame,
+            textvariable=self.text_font_size_var,
+            values=FONT_SIZE_CHOICES,
+            state="readonly",
+            style="BibleDisk.TCombobox",
+        )
+        self.font_size_combo.grid(row=11, column=0, sticky="ew", pady=(8, 18), ipady=6)
+        self.font_size_combo.bind("<<ComboboxSelected>>", self._on_font_change)
+
+        self._make_section_label(self.control_frame, "Text Colors", 12)
+        self._make_action_button(
+            self.control_frame,
+            text="Korean Color",
+            command=lambda: self._choose_text_color(self.korean_text_color_var, "Choose Korean text color"),
+            bg="#252525",
+            fg="#F8F8F8",
+            hover_bg="#313131",
+            padx=14,
+            pady=12,
+        ).grid(row=13, column=0, sticky="ew", pady=(8, 8))
+        self._make_action_button(
+            self.control_frame,
+            text="English Color",
+            command=lambda: self._choose_text_color(self.english_text_color_var, "Choose English text color"),
+            bg="#252525",
+            fg="#F8F8F8",
+            hover_bg="#313131",
+            padx=14,
+            pady=12,
+        ).grid(row=14, column=0, sticky="ew", pady=(0, 8))
+        self._make_action_button(
+            self.control_frame,
+            text="Spanish Color",
+            command=lambda: self._choose_text_color(self.spanish_text_color_var, "Choose Spanish text color"),
+            bg="#252525",
+            fg="#F8F8F8",
+            hover_bg="#313131",
+            padx=14,
+            pady=12,
+        ).grid(row=15, column=0, sticky="ew", pady=(0, 18))
+
+        self._make_section_label(self.control_frame, "Subtitle Duration (seconds)", 16)
         tk.Entry(
             self.control_frame,
             textvariable=self.duration_var,
@@ -226,10 +277,10 @@ class CaptionStudioApp:
             highlightthickness=1,
             highlightbackground="#343434",
             highlightcolor="#4E59FF",
-        ).grid(row=11, column=0, sticky="ew", ipady=8, pady=(8, 18))
+        ).grid(row=17, column=0, sticky="ew", ipady=8, pady=(8, 18))
 
         action_frame = tk.Frame(self.control_frame, bg="#181818")
-        action_frame.grid(row=12, column=0, sticky="ew")
+        action_frame.grid(row=18, column=0, sticky="ew")
         action_frame.grid_columnconfigure(0, weight=1)
         action_frame.grid_columnconfigure(1, weight=1)
 
@@ -263,7 +314,7 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=13, column=0, sticky="ew", pady=(12, 8))
+        ).grid(row=19, column=0, sticky="ew", pady=(12, 8))
 
         self._make_action_button(
             self.control_frame,
@@ -274,7 +325,7 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=14, column=0, sticky="ew")
+        ).grid(row=20, column=0, sticky="ew")
 
         status = tk.Label(
             self.control_frame,
@@ -286,7 +337,7 @@ class CaptionStudioApp:
             fg="#B8B8B8",
             font=("Helvetica", 11),
         )
-        status.grid(row=15, column=0, sticky="ew", pady=(22, 0))
+        status.grid(row=21, column=0, sticky="ew", pady=(22, 0))
 
     def _make_title(self, parent: tk.Widget, text: str, row: int) -> None:
         tk.Label(
@@ -408,6 +459,7 @@ class CaptionStudioApp:
         if not self.books:
             raise RuntimeError("The SQLite database does not contain any Bible books.")
         self.font_combo.set(self.text_font_var.get())
+        self.font_size_combo.set(self.text_font_size_var.get())
         self._set_menu_values(self.book_picker, self.book_var, [self._book_label(book) for book in self.books])
 
     def _on_book_change(self) -> None:
@@ -471,6 +523,19 @@ class CaptionStudioApp:
 
     def _on_font_change(self, _: object | None = None) -> None:
         self._redraw_preview()
+
+    def _choose_text_color(self, color_var: tk.StringVar, title: str) -> None:
+        _, chosen = colorchooser.askcolor(color=color_var.get(), title=title)
+        if not chosen:
+            return
+        color_var.set(chosen)
+        self._redraw_preview()
+
+    def _base_font_size(self) -> int:
+        try:
+            return max(18, min(48, int(self.text_font_size_var.get().strip())))
+        except ValueError:
+            return 30
 
     def _toggle_panel_event(self, _: object | None = None) -> None:
         self._set_panel_visible(not self.panel_visible)
@@ -540,15 +605,16 @@ class CaptionStudioApp:
         height: int,
         font_family: str,
         texts: tuple[str, str, str],
+        base_font_size: int,
     ) -> dict[str, object]:
         text_width = width - 80
         minimum_overlay_top = int(height * 0.52)
         size_candidates: list[tuple[int, int, int]] = []
 
         for size_step in range(0, 11):
-            korean_size = max(20, min(35, int(width * 0.028)) - size_step)
-            english_size = max(19, min(33, int(width * 0.027)) - size_step)
-            spanish_size = max(18, min(31, int(width * 0.026)) - size_step)
+            korean_size = max(18, base_font_size - size_step)
+            english_size = max(17, base_font_size - 1 - size_step)
+            spanish_size = max(16, base_font_size - 2 - size_step)
             size_candidates.append((korean_size, english_size, spanish_size))
 
         for korean_size, english_size, spanish_size in size_candidates:
@@ -586,9 +652,9 @@ class CaptionStudioApp:
                     "between_gap": between_gap,
                 }
 
-        korean_font, korean_height = self._measure_text_block(texts[0], font_family, 20, text_width)
-        english_font, english_height = self._measure_text_block(texts[1], font_family, 19, text_width)
-        spanish_font, spanish_height = self._measure_text_block(texts[2], font_family, 18, text_width)
+        korean_font, korean_height = self._measure_text_block(texts[0], font_family, max(18, base_font_size - 10), text_width)
+        english_font, english_height = self._measure_text_block(texts[1], font_family, max(17, base_font_size - 11), text_width)
+        spanish_font, spanish_height = self._measure_text_block(texts[2], font_family, max(16, base_font_size - 12), text_width)
         overlay_top = minimum_overlay_top
         overlay_height = height - overlay_top
         return {
@@ -612,6 +678,7 @@ class CaptionStudioApp:
         width = max(canvas.winfo_width(), 900)
         height = max(canvas.winfo_height(), 600)
         font_family = self._preview_font_family()
+        base_font_size = self._base_font_size()
 
         canvas.create_rectangle(0, 0, width, height, fill="#030303", outline="")
         canvas.create_text(
@@ -648,7 +715,7 @@ class CaptionStudioApp:
             english = self.current_bundle.english_text
             spanish = self.current_bundle.spanish_text
 
-        layout = self._resolve_overlay_layout(width, height, font_family, (korean, english, spanish))
+        layout = self._resolve_overlay_layout(width, height, font_family, (korean, english, spanish), base_font_size)
         overlay_top = int(layout["overlay_top"])
         self._draw_gradient(canvas, width, overlay_top, height)
 
@@ -679,7 +746,7 @@ class CaptionStudioApp:
             anchor="nw",
             width=text_width,
             text=korean,
-            fill="#F3F3F3",
+            fill=self.korean_text_color_var.get(),
             font=layout["korean_font"],
         )
         current_y += int(layout["korean_height"]) + int(layout["between_gap"])
@@ -689,7 +756,7 @@ class CaptionStudioApp:
             anchor="nw",
             width=text_width,
             text=english,
-            fill="#FFF36E",
+            fill=self.english_text_color_var.get(),
             font=layout["english_font"],
         )
         current_y += int(layout["english_height"]) + int(layout["between_gap"])
@@ -699,7 +766,7 @@ class CaptionStudioApp:
             anchor="nw",
             width=text_width,
             text=spanish,
-            fill="#FFC6A4",
+            fill=self.spanish_text_color_var.get(),
             font=layout["spanish_font"],
         )
 
