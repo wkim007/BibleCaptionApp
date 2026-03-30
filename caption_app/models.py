@@ -31,12 +31,16 @@ class VerseReference:
     book_id: int
     book_korean: str
     book_english: str
+    book_spanish: str
     chapter_num: int
     verse_num: int
 
     @property
     def label(self) -> str:
-        return f"{self.book_korean} | {self.book_english} {self.chapter_num}:{self.verse_num}"
+        return (
+            f"{self.book_korean} | {self.book_english} | "
+            f"{self.book_spanish} {self.chapter_num}:{self.verse_num}"
+        )
 
 
 @dataclass(frozen=True, slots=True)

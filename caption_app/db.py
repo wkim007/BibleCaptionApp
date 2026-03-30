@@ -61,6 +61,7 @@ class BibleRepository:
                 b.book_id,
                 b.kor_full,
                 b.eng_full,
+                MAX(CASE WHEN bt.version_id = 3 THEN bt.book_title END) AS spanish_book_title,
                 v.chapter_num,
                 v.verse_num,
                 MAX(CASE WHEN vt.version_id = 1 THEN vt.verse_text END) AS korean_text,
@@ -69,6 +70,7 @@ class BibleRepository:
             FROM verses v
             JOIN books b ON b.book_id = v.book_id
             JOIN verse_texts vt ON vt.verse_id = v.verse_id
+            LEFT JOIN book_titles bt ON bt.book_id = b.book_id
             WHERE v.book_id = ? AND v.chapter_num = ? AND v.verse_num = ?
             GROUP BY b.book_id, b.kor_full, b.eng_full, v.chapter_num, v.verse_num
         """
@@ -82,12 +84,13 @@ class BibleRepository:
             book_id=row[0],
             book_korean=row[1],
             book_english=row[2],
-            chapter_num=row[3],
-            verse_num=row[4],
+            book_spanish=row[3] or row[2],
+            chapter_num=row[4],
+            verse_num=row[5],
         )
         return VerseBundle(
             reference=reference,
-            korean_text=row[5] or "",
-            english_text=row[6] or "",
-            spanish_text=row[7] or "",
+            korean_text=row[6] or "",
+            english_text=row[7] or "",
+            spanish_text=row[8] or "",
         )

@@ -687,6 +687,42 @@ class CaptionStudioApp:
         height = max(line_spacing * max(len(lines), 1), line_spacing)
         return preview_font, height
 
+    def _draw_top_rounded_box(
+        self,
+        canvas: tk.Canvas,
+        left: int,
+        top: int,
+        right: int,
+        bottom: int,
+        radius: int,
+        fill: str,
+    ) -> None:
+        radius = max(0, min(radius, (right - left) // 2, (bottom - top)))
+        canvas.create_rectangle(left, top + radius, right, bottom, fill=fill, outline="")
+        canvas.create_rectangle(left + radius, top, right - radius, top + radius, fill=fill, outline="")
+        canvas.create_arc(
+            left,
+            top,
+            left + radius * 2,
+            top + radius * 2,
+            start=90,
+            extent=90,
+            style="pieslice",
+            outline="",
+            fill=fill,
+        )
+        canvas.create_arc(
+            right - radius * 2,
+            top,
+            right,
+            top + radius * 2,
+            start=0,
+            extent=90,
+            style="pieslice",
+            outline="",
+            fill=fill,
+        )
+
     def _resolve_overlay_layout(
         self,
         width: int,
@@ -806,17 +842,21 @@ class CaptionStudioApp:
         overlay_top = int(layout["overlay_top"])
         self._draw_gradient(canvas, width, overlay_top, height)
 
-        tag_width = min(max(360, len(tag_text) * 12), width - 80)
-        canvas.create_rectangle(
-            24,
-            overlay_top - 58,
-            24 + tag_width,
-            overlay_top + 22,
+        tag_width = min(max(420, len(tag_text) * 11), width - 36)
+        tag_left = 0
+        tag_top = overlay_top - 58
+        tag_bottom = overlay_top + 22
+        self._draw_top_rounded_box(
+            canvas,
+            tag_left,
+            tag_top,
+            tag_left + tag_width,
+            tag_bottom,
+            radius=20,
             fill="#F4F4F1",
-            outline="",
         )
         canvas.create_text(
-            40,
+            28,
             overlay_top - 18,
             anchor="w",
             text=tag_text,
