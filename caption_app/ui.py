@@ -126,7 +126,11 @@ class CaptionStudioApp:
         self.root_frame: tk.Frame
         self.stage_frame: tk.Frame
         self.divider_frame: tk.Frame
+        self.control_container: tk.Frame
+        self.control_canvas: tk.Canvas
+        self.control_scrollbar: tk.Scrollbar
         self.control_frame: tk.Frame
+        self.control_window_id: int
         self.preview_canvas: tk.Canvas
         self.reference_tag_id: int
         self.korean_text_id: int
@@ -190,11 +194,39 @@ class CaptionStudioApp:
         self.divider_frame.bind("<Button-1>", self._start_resize_panel)
         self.divider_frame.bind("<B1-Motion>", self._resize_panel_drag)
 
-        self.control_frame = tk.Frame(self.root_frame, bg="#181818", padx=20, pady=20)
-        self.control_frame.grid(row=0, column=2, sticky="nsew")
+        self.root_frame.grid_columnconfigure(2, weight=0)
+
+        self.control_container = tk.Frame(self.root_frame, bg="#181818", width=self.panel_width)
+        self.control_container.grid(row=0, column=2, sticky="nsew")
+        self.control_container.grid_propagate(False)
+
+        self.control_canvas = tk.Canvas(
+            self.control_container,
+            bg="#181818",
+            highlightthickness=0,
+            bd=0,
+            width=self.panel_width,
+        )
+        self.control_canvas.grid(row=0, column=0, sticky="nsew")
+
+        self.control_scrollbar = tk.Scrollbar(
+            self.control_container,
+            orient="vertical",
+            command=self.control_canvas.yview,
+        )
+        self.control_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.control_canvas.configure(yscrollcommand=self.control_scrollbar.set)
+
+        self.control_container.grid_rowconfigure(0, weight=1)
+        self.control_container.grid_columnconfigure(0, weight=1)
+
+        self.control_frame = tk.Frame(self.control_canvas, bg="#181818", padx=20, pady=20)
         self.control_frame.grid_columnconfigure(0, weight=1)
-        self.control_frame.grid_propagate(False)
-        self.control_frame.configure(width=self.panel_width)
+        self.control_window_id = self.control_canvas.create_window((0, 0), window=self.control_frame, anchor="nw")
+        self.control_frame.bind("<Configure>", self._sync_control_scrollregion)
+        self.control_canvas.bind("<Configure>", self._resize_control_content)
+        self.control_canvas.bind("<Enter>", self._bind_panel_mousewheel)
+        self.control_canvas.bind("<Leave>", self._unbind_panel_mousewheel)
         self._configure_ttk_styles()
 
         header_frame = tk.Frame(self.control_frame, bg="#181818")
@@ -292,31 +324,35 @@ class CaptionStudioApp:
             font=("Helvetica", 10, "bold"),
         ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
-        self._make_section_label(self.control_frame, "Text Font", 11)
+        self._make_section_label(self.control_frame, "Text Style", 11)
+        text_style_row = tk.Frame(self.control_frame, bg="#181818")
+        text_style_row.grid(row=12, column=0, sticky="ew", pady=(8, 18))
+        for column in range(2):
+            text_style_row.grid_columnconfigure(column, weight=1)
+
         self.font_combo = ttk.Combobox(
-            self.control_frame,
+            text_style_row,
             textvariable=self.text_font_var,
             values=FONT_CHOICES,
             state="readonly",
             style="BibleDisk.TCombobox",
         )
-        self.font_combo.grid(row=12, column=0, sticky="ew", pady=(8, 18), ipady=6)
+        self.font_combo.grid(row=0, column=0, sticky="ew", padx=(0, 6), ipady=6)
         self.font_combo.bind("<<ComboboxSelected>>", self._on_font_change)
 
-        self._make_section_label(self.control_frame, "Text Font Size", 13)
         self.font_size_combo = ttk.Combobox(
-            self.control_frame,
+            text_style_row,
             textvariable=self.text_font_size_var,
             values=FONT_SIZE_CHOICES,
             state="readonly",
             style="BibleDisk.TCombobox",
         )
-        self.font_size_combo.grid(row=14, column=0, sticky="ew", pady=(8, 18), ipady=6)
+        self.font_size_combo.grid(row=0, column=1, sticky="ew", padx=(6, 0), ipady=6)
         self.font_size_combo.bind("<<ComboboxSelected>>", self._on_font_change)
 
-        self._make_section_label(self.control_frame, "Text Colors", 15)
+        self._make_section_label(self.control_frame, "Text Colors", 13)
         text_color_row = tk.Frame(self.control_frame, bg="#181818")
-        text_color_row.grid(row=16, column=0, sticky="ew", pady=(8, 18))
+        text_color_row.grid(row=14, column=0, sticky="ew", pady=(8, 18))
         for column in range(3):
             text_color_row.grid_columnconfigure(column, weight=1)
         self._make_action_button(
@@ -353,18 +389,18 @@ class CaptionStudioApp:
             font=("Helvetica", 10, "bold"),
         ).grid(row=0, column=2, sticky="ew", padx=(6, 0))
 
-        self._make_section_label(self.control_frame, "Languages", 17)
+        self._make_section_label(self.control_frame, "Languages", 15)
         language_row = tk.Frame(self.control_frame, bg="#181818")
-        language_row.grid(row=18, column=0, sticky="ew", pady=(8, 18))
+        language_row.grid(row=16, column=0, sticky="ew", pady=(8, 18))
         for column in range(3):
             language_row.grid_columnconfigure(column, weight=1)
         self._make_language_check(language_row, "Korean", self.show_korean_var).grid(row=0, column=0, sticky="w")
         self._make_language_check(language_row, "English", self.show_english_var).grid(row=0, column=1, sticky="w")
         self._make_language_check(language_row, "Spanish", self.show_spanish_var).grid(row=0, column=2, sticky="w")
 
-        self._make_section_label(self.control_frame, "Caption Duration (seconds)", 19)
+        self._make_section_label(self.control_frame, "Caption Duration (seconds)", 17)
         duration_row = tk.Frame(self.control_frame, bg="#181818")
-        duration_row.grid(row=20, column=0, sticky="ew", pady=(8, 8))
+        duration_row.grid(row=18, column=0, sticky="ew", pady=(8, 8))
         duration_row.grid_columnconfigure(0, weight=1)
         duration_row.grid_columnconfigure(1, weight=0)
         self.duration_spinbox = tk.Spinbox(
@@ -407,10 +443,10 @@ class CaptionStudioApp:
             bg="#181818",
             fg="#B8B8B8",
             font=("Helvetica", 11, "bold"),
-        ).grid(row=21, column=0, sticky="ew", pady=(0, 18))
+        ).grid(row=19, column=0, sticky="ew", pady=(0, 18))
 
         action_frame = tk.Frame(self.control_frame, bg="#181818")
-        action_frame.grid(row=22, column=0, sticky="ew")
+        action_frame.grid(row=20, column=0, sticky="ew")
         action_frame.grid_columnconfigure(0, weight=1)
         action_frame.grid_columnconfigure(1, weight=1)
 
@@ -444,7 +480,7 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=23, column=0, sticky="ew", pady=(12, 8))
+        ).grid(row=21, column=0, sticky="ew", pady=(12, 8))
         self._make_action_button(
             self.control_frame,
             text="Copy Verse Text",
@@ -454,7 +490,7 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=24, column=0, sticky="ew", pady=(0, 8))
+        ).grid(row=22, column=0, sticky="ew", pady=(0, 8))
         self.default_settings_button = self._make_action_button(
             self.control_frame,
             text="Default Settings",
@@ -465,7 +501,7 @@ class CaptionStudioApp:
             padx=14,
             pady=12,
         )
-        self.default_settings_button.grid(row=25, column=0, sticky="ew")
+        self.default_settings_button.grid(row=23, column=0, sticky="ew")
 
         status = tk.Label(
             self.control_frame,
@@ -477,7 +513,7 @@ class CaptionStudioApp:
             fg="#B8B8B8",
             font=("Helvetica", 11),
         )
-        status.grid(row=26, column=0, sticky="ew", pady=(22, 0))
+        status.grid(row=24, column=0, sticky="ew", pady=(22, 0))
 
     def _make_title(self, parent: tk.Widget, text: str, row: int) -> None:
         tk.Label(
@@ -927,7 +963,9 @@ class CaptionStudioApp:
         total_width = self.root_frame.winfo_width()
         new_width = max(280, min(640, total_width - event.x_root + self.root_frame.winfo_rootx()))
         self.panel_width = new_width
-        self.control_frame.configure(width=self.panel_width)
+        self.control_container.configure(width=self.panel_width)
+        self.control_canvas.configure(width=self.panel_width)
+        self._resize_control_content()
 
     def _apply_default_settings_to_controls(self, redraw: bool = True) -> None:
         default_font = self._default_preview_font()
@@ -1011,13 +1049,50 @@ class CaptionStudioApp:
         self.panel_visible = visible
         if visible:
             self.divider_frame.grid()
-            self.control_frame.grid()
-            self.control_frame.configure(width=self.panel_width)
+            self.control_container.grid()
+            self.control_container.configure(width=self.panel_width)
+            self.control_canvas.configure(width=self.panel_width)
+            self._resize_control_content()
             self._set_status("Right panel shown. Press Ctrl+I to hide it.")
         else:
             self.divider_frame.grid_remove()
-            self.control_frame.grid_remove()
+            self.control_container.grid_remove()
             self._set_status("Right panel hidden. Press Ctrl+I to show it again.")
+
+    def _sync_control_scrollregion(self, _: object | None = None) -> None:
+        self.control_canvas.configure(scrollregion=self.control_canvas.bbox("all"))
+
+    def _resize_control_content(self, event: tk.Event | None = None) -> None:
+        canvas_width = event.width if event is not None else self.control_canvas.winfo_width()
+        if canvas_width <= 1:
+            return
+        self.control_canvas.itemconfigure(self.control_window_id, width=canvas_width)
+        self._sync_control_scrollregion()
+
+    def _bind_panel_mousewheel(self, _: object | None = None) -> None:
+        self.control_canvas.bind_all("<MouseWheel>", self._scroll_control_panel)
+        self.control_canvas.bind_all("<Button-4>", self._scroll_control_panel)
+        self.control_canvas.bind_all("<Button-5>", self._scroll_control_panel)
+
+    def _unbind_panel_mousewheel(self, _: object | None = None) -> None:
+        self.control_canvas.unbind_all("<MouseWheel>")
+        self.control_canvas.unbind_all("<Button-4>")
+        self.control_canvas.unbind_all("<Button-5>")
+
+    def _scroll_control_panel(self, event: tk.Event) -> str | None:
+        if not self.panel_visible:
+            return None
+        if getattr(event, "num", None) == 4:
+            delta = -1
+        elif getattr(event, "num", None) == 5:
+            delta = 1
+        else:
+            raw_delta = getattr(event, "delta", 0)
+            if raw_delta == 0:
+                return None
+            delta = -1 if raw_delta > 0 else 1
+        self.control_canvas.yview_scroll(delta, "units")
+        return "break"
 
     def _set_menu_values(self, menu_widget: tk.OptionMenu, variable: tk.StringVar, values: list[str]) -> None:
         menu = menu_widget["menu"]
