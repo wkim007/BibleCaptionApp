@@ -93,6 +93,7 @@ class CaptionStudioApp:
         self.root.geometry("1280x900")
         self.root.minsize(1080, 760)
         self.root.configure(bg="#111111")
+        self.menu_bar: tk.Menu | None = None
 
         self.book_var = tk.StringVar()
         self.chapter_var = tk.StringVar()
@@ -173,6 +174,7 @@ class CaptionStudioApp:
 
         menu.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=menu)
+        self.menu_bar = menu
 
     def _build_layout(self) -> None:
         self.root_frame = tk.Frame(self.root, bg="#111111")
@@ -836,8 +838,8 @@ class CaptionStudioApp:
         dialog.configure(bg="#181818")
         dialog.resizable(False, False)
 
-        width = 560
-        height = 240
+        width = 680
+        height = 300
         root_x = self.root.winfo_rootx()
         root_y = self.root.winfo_rooty()
         root_width = self.root.winfo_width()
@@ -869,7 +871,7 @@ class CaptionStudioApp:
             fg="#D6D6D6",
             anchor="w",
             justify="left",
-            wraplength=500,
+            wraplength=620,
             font=("Helvetica", 15, "bold"),
         ).grid(row=1, column=0, sticky="ew", pady=(10, 16))
 
@@ -889,6 +891,8 @@ class CaptionStudioApp:
 
         button_row = tk.Frame(container, bg="#181818")
         button_row.grid(row=3, column=0, sticky="e", pady=(22, 0))
+        button_row.grid_columnconfigure(0, minsize=130)
+        button_row.grid_columnconfigure(1, minsize=150)
 
         def submit() -> None:
             result["value"] = search_var.get()
@@ -905,8 +909,8 @@ class CaptionStudioApp:
             bg="#364BFF",
             fg="#F8F8F8",
             hover_bg="#4358FF",
-            padx=24,
-            pady=12,
+            padx=34,
+            pady=14,
             font=("Helvetica", 13, "bold"),
         ).grid(row=0, column=0, sticky="ew", padx=(0, 10))
         self._make_action_button(
@@ -916,8 +920,8 @@ class CaptionStudioApp:
             bg="#252525",
             fg="#F8F8F8",
             hover_bg="#313131",
-            padx=24,
-            pady=12,
+            padx=34,
+            pady=14,
             font=("Helvetica", 13, "bold"),
         ).grid(row=0, column=1, sticky="ew")
 
@@ -1169,6 +1173,8 @@ class CaptionStudioApp:
     def _enter_fullscreen(self, _: object | None = None) -> str:
         self.fullscreen_active = True
         self._set_stage_padding(0)
+        if sys.platform.startswith("win"):
+            self.root.config(menu="")
         self.root.attributes("-fullscreen", True)
         return "break"
 
@@ -1178,6 +1184,8 @@ class CaptionStudioApp:
         self.fullscreen_active = False
         self.root.attributes("-fullscreen", False)
         self._set_stage_padding(self.NORMAL_STAGE_PADDING)
+        if sys.platform.startswith("win") and self.menu_bar is not None:
+            self.root.config(menu=self.menu_bar)
         return "break"
 
     def _hide_panel(self) -> None:
