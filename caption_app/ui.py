@@ -74,6 +74,8 @@ FONT_SIZE_CHOICES = [str(size) for size in range(18, 49, 2)]
 
 
 class CaptionStudioApp:
+    NORMAL_STAGE_PADDING = 18
+
     def __init__(self) -> None:
         self.repository = BibleRepository()
         self.books = self.repository.list_books()
@@ -179,7 +181,12 @@ class CaptionStudioApp:
         self.root_frame.grid_rowconfigure(0, weight=1)
         self.root_frame.grid_columnconfigure(0, weight=1)
 
-        self.stage_frame = tk.Frame(self.root_frame, bg="#111111", padx=18, pady=18)
+        self.stage_frame = tk.Frame(
+            self.root_frame,
+            bg="#111111",
+            padx=self.NORMAL_STAGE_PADDING,
+            pady=self.NORMAL_STAGE_PADDING,
+        )
         self.stage_frame.grid(row=0, column=0, sticky="nsew")
         self.stage_frame.grid_rowconfigure(0, weight=1)
         self.stage_frame.grid_columnconfigure(0, weight=1)
@@ -256,8 +263,18 @@ class CaptionStudioApp:
             fg="#D6D6D6",
             anchor="w",
             font=("Helvetica", 11, "bold"),
-        ).grid(row=1, column=0, sticky="ew", pady=(6, 16))
-        self._make_section_label(self.control_frame, "Bible Caption Studio Color", 2)
+        ).grid(row=1, column=0, sticky="ew", pady=(6, 6))
+        tk.Label(
+            self.control_frame,
+            text="Ctrl + s will full screen and Esc exits back to the normal windows",
+            bg="#181818",
+            fg="#D6D6D6",
+            anchor="w",
+            wraplength=320,
+            justify="left",
+            font=("Helvetica", 11, "bold"),
+        ).grid(row=2, column=0, sticky="ew", pady=(0, 16))
+        self._make_section_label(self.control_frame, "Bible Caption Studio Color", 3)
         self._make_action_button(
             self.control_frame,
             text="Pick Background Color",
@@ -270,16 +287,16 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=3, column=0, sticky="ew", pady=(8, 18))
+        ).grid(row=4, column=0, sticky="ew", pady=(8, 18))
 
-        self._make_section_label(self.control_frame, "Reference", 4)
-        self.book_picker = self._make_option_menu(self.control_frame, 5, self.book_var, self._on_book_change)
-        self.chapter_picker = self._make_option_menu(self.control_frame, 6, self.chapter_var, self._on_chapter_change)
-        self.verse_picker = self._make_option_menu(self.control_frame, 7, self.verse_var, self._on_verse_change)
+        self._make_section_label(self.control_frame, "Reference", 5)
+        self.book_picker = self._make_option_menu(self.control_frame, 6, self.book_var, self._on_book_change)
+        self.chapter_picker = self._make_option_menu(self.control_frame, 7, self.chapter_var, self._on_chapter_change)
+        self.verse_picker = self._make_option_menu(self.control_frame, 8, self.verse_var, self._on_verse_change)
 
-        self._make_section_label(self.control_frame, "Caption Chapter Style", 8)
+        self._make_section_label(self.control_frame, "Caption Chapter Style", 9)
         chapter_style_row = tk.Frame(self.control_frame, bg="#181818")
-        chapter_style_row.grid(row=9, column=0, sticky="ew", pady=(8, 8))
+        chapter_style_row.grid(row=10, column=0, sticky="ew", pady=(8, 8))
         for column in range(2):
             chapter_style_row.grid_columnconfigure(column, weight=1)
         self.chapter_font_combo = ttk.Combobox(
@@ -302,7 +319,7 @@ class CaptionStudioApp:
         self.chapter_font_size_combo.bind("<<ComboboxSelected>>", self._on_font_change)
 
         chapter_color_row = tk.Frame(self.control_frame, bg="#181818")
-        chapter_color_row.grid(row=10, column=0, sticky="ew", pady=(0, 18))
+        chapter_color_row.grid(row=11, column=0, sticky="ew", pady=(0, 18))
         for column in range(2):
             chapter_color_row.grid_columnconfigure(column, weight=1)
         self._make_action_button(
@@ -328,9 +345,9 @@ class CaptionStudioApp:
             font=("Helvetica", 10, "bold"),
         ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
-        self._make_section_label(self.control_frame, "Text Style", 11)
+        self._make_section_label(self.control_frame, "Text Style", 12)
         text_style_row = tk.Frame(self.control_frame, bg="#181818")
-        text_style_row.grid(row=12, column=0, sticky="ew", pady=(8, 18))
+        text_style_row.grid(row=13, column=0, sticky="ew", pady=(8, 18))
         for column in range(2):
             text_style_row.grid_columnconfigure(column, weight=1)
 
@@ -354,9 +371,9 @@ class CaptionStudioApp:
         self.font_size_combo.grid(row=0, column=1, sticky="ew", padx=(6, 0), ipady=6)
         self.font_size_combo.bind("<<ComboboxSelected>>", self._on_font_change)
 
-        self._make_section_label(self.control_frame, "Text Colors", 13)
+        self._make_section_label(self.control_frame, "Text Colors", 14)
         text_color_row = tk.Frame(self.control_frame, bg="#181818")
-        text_color_row.grid(row=14, column=0, sticky="ew", pady=(8, 18))
+        text_color_row.grid(row=15, column=0, sticky="ew", pady=(8, 18))
         for column in range(3):
             text_color_row.grid_columnconfigure(column, weight=1)
         self._make_action_button(
@@ -393,18 +410,18 @@ class CaptionStudioApp:
             font=("Helvetica", 10, "bold"),
         ).grid(row=0, column=2, sticky="ew", padx=(6, 0))
 
-        self._make_section_label(self.control_frame, "Languages", 15)
+        self._make_section_label(self.control_frame, "Languages", 16)
         language_row = tk.Frame(self.control_frame, bg="#181818")
-        language_row.grid(row=16, column=0, sticky="ew", pady=(8, 18))
+        language_row.grid(row=17, column=0, sticky="ew", pady=(8, 18))
         for column in range(3):
             language_row.grid_columnconfigure(column, weight=1)
         self._make_language_check(language_row, "Korean", self.show_korean_var).grid(row=0, column=0, sticky="w")
         self._make_language_check(language_row, "English", self.show_english_var).grid(row=0, column=1, sticky="w")
         self._make_language_check(language_row, "Spanish", self.show_spanish_var).grid(row=0, column=2, sticky="w")
 
-        self._make_section_label(self.control_frame, "Caption Duration (seconds)", 17)
+        self._make_section_label(self.control_frame, "Caption Duration (seconds)", 18)
         duration_row = tk.Frame(self.control_frame, bg="#181818")
-        duration_row.grid(row=18, column=0, sticky="ew", pady=(8, 8))
+        duration_row.grid(row=19, column=0, sticky="ew", pady=(8, 8))
         duration_row.grid_columnconfigure(0, weight=1)
         duration_row.grid_columnconfigure(1, weight=0)
         self.duration_spinbox = tk.Spinbox(
@@ -447,10 +464,10 @@ class CaptionStudioApp:
             bg="#181818",
             fg="#B8B8B8",
             font=("Helvetica", 11, "bold"),
-        ).grid(row=19, column=0, sticky="ew", pady=(0, 18))
+        ).grid(row=20, column=0, sticky="ew", pady=(0, 18))
 
         action_frame = tk.Frame(self.control_frame, bg="#181818")
-        action_frame.grid(row=20, column=0, sticky="ew")
+        action_frame.grid(row=21, column=0, sticky="ew")
         action_frame.grid_columnconfigure(0, weight=1)
         action_frame.grid_columnconfigure(1, weight=1)
 
@@ -484,7 +501,7 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=21, column=0, sticky="ew", pady=(12, 8))
+        ).grid(row=22, column=0, sticky="ew", pady=(12, 8))
         self._make_action_button(
             self.control_frame,
             text="Copy Verse Text",
@@ -494,7 +511,7 @@ class CaptionStudioApp:
             hover_bg="#313131",
             padx=14,
             pady=12,
-        ).grid(row=22, column=0, sticky="ew", pady=(0, 8))
+        ).grid(row=23, column=0, sticky="ew", pady=(0, 8))
         self.default_settings_button = self._make_action_button(
             self.control_frame,
             text="Default Settings",
@@ -505,7 +522,7 @@ class CaptionStudioApp:
             padx=14,
             pady=12,
         )
-        self.default_settings_button.grid(row=23, column=0, sticky="ew")
+        self.default_settings_button.grid(row=24, column=0, sticky="ew")
 
         status = tk.Label(
             self.control_frame,
@@ -517,7 +534,7 @@ class CaptionStudioApp:
             fg="#B8B8B8",
             font=("Helvetica", 11),
         )
-        status.grid(row=24, column=0, sticky="ew", pady=(22, 0))
+        status.grid(row=25, column=0, sticky="ew", pady=(22, 0))
 
     def _make_title(self, parent: tk.Widget, text: str, row: int) -> None:
         tk.Label(
@@ -1046,8 +1063,12 @@ class CaptionStudioApp:
     def _toggle_panel_event(self, _: object | None = None) -> None:
         self._set_panel_visible(not self.panel_visible)
 
+    def _set_stage_padding(self, padding: int) -> None:
+        self.stage_frame.configure(padx=padding, pady=padding)
+
     def _enter_fullscreen(self, _: object | None = None) -> str:
         self.fullscreen_active = True
+        self._set_stage_padding(0)
         self.root.attributes("-fullscreen", True)
         return "break"
 
@@ -1056,6 +1077,7 @@ class CaptionStudioApp:
             return None
         self.fullscreen_active = False
         self.root.attributes("-fullscreen", False)
+        self._set_stage_padding(self.NORMAL_STAGE_PADDING)
         return "break"
 
     def _hide_panel(self) -> None:
