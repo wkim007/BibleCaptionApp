@@ -85,6 +85,7 @@ class CaptionStudioApp:
         self.subtitle_visible = True
         self.countdown_job: str | None = None
         self.countdown_end_time: float | None = None
+        self.fullscreen_active = False
 
         self.root = tk.Tk()
         self.root.title("Bible Caption Studio")
@@ -145,6 +146,9 @@ class CaptionStudioApp:
         self.root.bind_all("<Control-I>", self._toggle_panel_event)
         self.root.bind_all("<Control-f>", self._open_search_dialog)
         self.root.bind_all("<Control-F>", self._open_search_dialog)
+        self.root.bind_all("<Control-s>", self._enter_fullscreen)
+        self.root.bind_all("<Control-S>", self._enter_fullscreen)
+        self.root.bind_all("<Escape>", self._exit_fullscreen)
         self.root.bind_all("<Left>", self._show_previous_verse)
         self.root.bind_all("<Right>", self._show_next_verse)
         self.root.bind_all("<Up>", self._show_next_book)
@@ -1041,6 +1045,18 @@ class CaptionStudioApp:
 
     def _toggle_panel_event(self, _: object | None = None) -> None:
         self._set_panel_visible(not self.panel_visible)
+
+    def _enter_fullscreen(self, _: object | None = None) -> str:
+        self.fullscreen_active = True
+        self.root.attributes("-fullscreen", True)
+        return "break"
+
+    def _exit_fullscreen(self, _: object | None = None) -> str | None:
+        if not self.fullscreen_active:
+            return None
+        self.fullscreen_active = False
+        self.root.attributes("-fullscreen", False)
+        return "break"
 
     def _hide_panel(self) -> None:
         self._set_panel_visible(False)
