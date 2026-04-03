@@ -6,7 +6,6 @@ import sys
 import tkinter as tk
 import tkinter.colorchooser as colorchooser
 import tkinter.font as tkfont
-import tkinter.simpledialog as simpledialog
 import time
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -824,15 +823,116 @@ class CaptionStudioApp:
         self._navigate_book(-1)
 
     def _open_search_dialog(self, event: object | None = None) -> str | None:
-        query = simpledialog.askstring(
-            "Find Verse",
-            "Enter a verse reference like 'John 1:1' or '요한복음 1:1'",
-            parent=self.root,
-        )
+        query = self._show_search_dialog()
         if query is None:
             return "break"
         self._search_and_navigate(query)
         return "break"
+
+    def _show_search_dialog(self) -> str | None:
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Find Verse")
+        dialog.transient(self.root)
+        dialog.configure(bg="#181818")
+        dialog.resizable(False, False)
+
+        width = 560
+        height = 240
+        root_x = self.root.winfo_rootx()
+        root_y = self.root.winfo_rooty()
+        root_width = self.root.winfo_width()
+        root_height = self.root.winfo_height()
+        position_x = root_x + max((root_width - width) // 2, 0)
+        position_y = root_y + max((root_height - height) // 2, 0)
+        dialog.geometry(f"{width}x{height}+{position_x}+{position_y}")
+
+        result: dict[str, str | None] = {"value": None}
+        search_var = tk.StringVar()
+
+        container = tk.Frame(dialog, bg="#181818", padx=24, pady=24)
+        container.pack(fill="both", expand=True)
+        container.grid_columnconfigure(0, weight=1)
+
+        tk.Label(
+            container,
+            text="Find Verse",
+            bg="#181818",
+            fg="#F4F4F4",
+            anchor="w",
+            font=("Helvetica", 20, "bold"),
+        ).grid(row=0, column=0, sticky="ew")
+
+        tk.Label(
+            container,
+            text="Enter a verse reference like 'John 1:1' or '요한복음 1:1'",
+            bg="#181818",
+            fg="#D6D6D6",
+            anchor="w",
+            justify="left",
+            wraplength=500,
+            font=("Helvetica", 15, "bold"),
+        ).grid(row=1, column=0, sticky="ew", pady=(10, 16))
+
+        entry = tk.Entry(
+            container,
+            textvariable=search_var,
+            bg="#242424",
+            fg="#F3F3F3",
+            insertbackground="#F3F3F3",
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground="#343434",
+            highlightcolor="#4E59FF",
+            font=("Helvetica", 18),
+        )
+        entry.grid(row=2, column=0, sticky="ew", ipady=10)
+
+        button_row = tk.Frame(container, bg="#181818")
+        button_row.grid(row=3, column=0, sticky="e", pady=(22, 0))
+
+        def submit() -> None:
+            result["value"] = search_var.get()
+            dialog.destroy()
+
+        def cancel() -> None:
+            result["value"] = None
+            dialog.destroy()
+
+        self._make_action_button(
+            button_row,
+            text="OK",
+            command=submit,
+            bg="#364BFF",
+            fg="#F8F8F8",
+            hover_bg="#4358FF",
+            padx=24,
+            pady=12,
+            font=("Helvetica", 13, "bold"),
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        self._make_action_button(
+            button_row,
+            text="Cancel",
+            command=cancel,
+            bg="#252525",
+            fg="#F8F8F8",
+            hover_bg="#313131",
+            padx=24,
+            pady=12,
+            font=("Helvetica", 13, "bold"),
+        ).grid(row=0, column=1, sticky="ew")
+
+        dialog.protocol("WM_DELETE_WINDOW", cancel)
+        dialog.bind("<Return>", lambda _: submit())
+        dialog.bind("<Escape>", lambda _: cancel())
+
+        dialog.update_idletasks()
+        dialog.grab_set()
+        entry.focus_set()
+        dialog.wait_window()
+        value = result["value"]
+        if value is None:
+            return None
+        return value.strip()
 
     def _search_and_navigate(self, query: str) -> None:
         raw = " ".join(query.strip().split())
