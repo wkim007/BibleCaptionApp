@@ -87,6 +87,8 @@ class CaptionStudioApp:
         self.countdown_job: str | None = None
         self.countdown_end_time: float | None = None
         self.fullscreen_active = False
+        self.pre_fullscreen_geometry: str | None = None
+        self.pre_fullscreen_state: str | None = None
 
         self.root = tk.Tk()
         self.root.title("Bible Caption Studio")
@@ -1170,19 +1172,94 @@ class CaptionStudioApp:
     def _set_stage_padding(self, padding: int) -> None:
         self.stage_frame.configure(padx=padding, pady=padding)
 
+    def _windows_monitor_bounds(self) -> tuple[int, int, int, int] | None:
+        if not sys.platform.startswith("win"):
+            return None
+
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class POINT(ctypes.Structure):
+                _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+            class RECT(ctypes.Structure):
+                _fields_ = [
+                    ("left", wintypes.LONG),
+                    ("top", wintypes.LONG),
+                    ("right", wintypes.LONG),
+                    ("bottom", wintypes.LONG),
+                ]
+
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", wintypes.DWORD),
+                    ("rcMonitor", RECT),
+                    ("rcWork", RECT),
+                    ("dwFlags", wintypes.DWORD),
+                ]
+
+            self.root.update_idletasks()
+            center_x = self.root.winfo_rootx() + max(self.root.winfo_width() // 2, 1)
+            center_y = self.root.winfo_rooty() + max(self.root.winfo_height() // 2, 1)
+
+            user32 = ctypes.windll.user32
+            monitor = user32.MonitorFromPoint(POINT(center_x, center_y), 2)
+            if not monitor:
+                return None
+
+            monitor_info = MONITORINFO()
+            monitor_info.cbSize = ctypes.sizeof(MONITORINFO)
+            if not user32.GetMonitorInfoW(monitor, ctypes.byref(monitor_info)):
+                return None
+
+            work_area = monitor_info.rcMonitor
+            return (
+                int(work_area.left),
+                int(work_area.top),
+                int(work_area.right - work_area.left),
+                int(work_area.bottom - work_area.top),
+            )
+        except Exception:
+            return None
+
     def _enter_fullscreen(self, _: object | None = None) -> str:
+        if self.fullscreen_active:
+            return "break"
+        self.root.update_idletasks()
+        self.pre_fullscreen_geometry = self.root.geometry()
+        self.pre_fullscreen_state = str(self.root.state())
         self.fullscreen_active = True
         self._set_stage_padding(0)
         if sys.platform.startswith("win"):
             self.root.config(menu="")
-        self.root.attributes("-fullscreen", True)
+            self.root.attributes("-fullscreen", False)
+            self.root.state("normal")
+            monitor_bounds = self._windows_monitor_bounds()
+            self.root.overrideredirect(True)
+            if monitor_bounds is not None:
+                left, top, width, height = monitor_bounds
+                self.root.geometry(f"{width}x{height}+{left}+{top}")
+            else:
+                self.root.state("zoomed")
+        else:
+            self.root.attributes("-fullscreen", True)
         return "break"
 
     def _exit_fullscreen(self, _: object | None = None) -> str | None:
         if not self.fullscreen_active:
             return None
         self.fullscreen_active = False
-        self.root.attributes("-fullscreen", False)
+        if sys.platform.startswith("win"):
+            self.root.overrideredirect(False)
+            self.root.attributes("-fullscreen", False)
+            self.root.state("normal")
+            if self.pre_fullscreen_geometry:
+                self.root.geometry(self.pre_fullscreen_geometry)
+            if self.pre_fullscreen_state == "zoomed":
+                self.root.state("zoomed")
+        else:
+            self.root.attributes("-fullscreen", False)
         self._set_stage_padding(self.NORMAL_STAGE_PADDING)
         if sys.platform.startswith("win") and self.menu_bar is not None:
             self.root.config(menu=self.menu_bar)
