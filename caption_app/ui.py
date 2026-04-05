@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -70,6 +71,7 @@ FONT_CHOICES = sorted(
 )
 
 FONT_SIZE_CHOICES = [str(size) for size in range(18, 49, 2)]
+SHORTCUT_FILE_NAME = "FindVerseShortcut.json"
 
 
 class CaptionStudioApp:
@@ -78,6 +80,7 @@ class CaptionStudioApp:
     def __init__(self) -> None:
         self.repository = BibleRepository()
         self.books = self.repository.list_books()
+        self.find_verse_shortcuts = self._load_find_verse_shortcuts()
         self.current_bundle: VerseBundle | None = None
         self.imported_content: dict[str, str] | None = None
         self.panel_visible = True
@@ -727,7 +730,7 @@ class CaptionStudioApp:
         return next((book for book in self.books if self._book_label(book) == value), None)
 
     def _find_book_by_name(self, raw_name: str):
-        normalized = " ".join(raw_name.strip().split()).casefold()
+        normalized = self._normalize_book_name(raw_name)
         if not normalized:
             return None
 
@@ -742,6 +745,42 @@ class CaptionStudioApp:
             if normalized in candidates:
                 return book
         return None
+
+    def _normalize_book_name(self, raw_name: str) -> str:
+        normalized = " ".join(raw_name.strip().split()).casefold()
+        if not normalized:
+            return ""
+        return self.find_verse_shortcuts.get(normalized, normalized)
+
+    def _load_find_verse_shortcuts(self) -> dict[str, str]:
+        shortcut_path = Path.cwd() / SHORTCUT_FILE_NAME
+        if not shortcut_path.exists():
+            return {}
+
+        try:
+            payload = json.loads(shortcut_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+        workspace = payload.get("workspace", {})
+        if not isinstance(workspace, dict):
+            return {}
+
+        normalized_shortcuts: dict[str, str] = {}
+        for language_values in workspace.values():
+            if not isinstance(language_values, dict):
+                continue
+            for full_name, shortcut in language_values.items():
+                if not isinstance(full_name, str) or not isinstance(shortcut, str):
+                    continue
+                normalized_full_name = " ".join(full_name.strip().split()).casefold()
+                normalized_shortcut = " ".join(shortcut.strip().split()).casefold()
+                if normalized_full_name:
+                    normalized_shortcuts[normalized_full_name] = normalized_full_name
+                if normalized_shortcut:
+                    normalized_shortcuts[normalized_shortcut] = normalized_full_name
+
+        return normalized_shortcuts
 
     def _selected_int(self, variable: tk.StringVar) -> int | None:
         value = variable.get().strip()
